@@ -44,3 +44,15 @@ See `ARCHITECTURE.md` for details. This layout reduces regressions and makes fea
 
 - Run production build: `npm run build`
 - Run tests (optional): `npm run test`
+
+### Settings
+
+- Scrolled View: ativa leitura por rolagem contínua
+- Same Folder: cria a nota do livro na mesma pasta do arquivo .epub
+- Note Folder: pasta padrão das notas (quando Same Folder está desligado)
+- Tags: tags adicionadas no frontmatter da nota criada
+- Debug logging: habilita logs detalhados para diagnóstico
+
+### Changelog
+
+- Consulte o arquivo `RELEASE_NOTES.md` para ver o histórico de mudanças.

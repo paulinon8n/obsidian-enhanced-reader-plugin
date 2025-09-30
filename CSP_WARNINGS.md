@@ -7,12 +7,14 @@ When using the Enhanced Reader Plugin, you may see Content Security Policy (CSP)
 ## Common Warnings
 
 ### 1. Stylesheet Blob URL Warnings
-```
+
+```text
 Refused to load the stylesheet 'blob:app://obsidian.md/...' because it violates the following Content Security Policy directive
 ```
 
 ### 2. Sandboxed Script Warnings  
-```
+
+```text
 Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set
 ```
 

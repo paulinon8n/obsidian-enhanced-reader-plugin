@@ -88,7 +88,7 @@ These changes reduce console noise, improve fidelity of book styling, and keep t
   - `ui/`: `ErrorBoundary` para evitar que erros derrubem o leitor
 - `EpubReader.tsx` passou a orquestrar essas peças; `EpubView.tsx` envolve o leitor com `ErrorBoundary`.
 
-### � Testes e Confiabilidade
+### 🧪 Testes e Confiabilidade
 
 - Supressão de avisos de CSP escopada apenas ao iframe do ePub (sem afetar o console global)
 - Sanitização centralizada: remoção de scripts, inlining de CSS com resolução de `@import`, remoção seletiva de `url(blob:)` em estilos inline
