@@ -77,7 +77,7 @@ These changes reduce console noise, improve fidelity of book styling, and keep t
 
 ---
 
-## Unreleased
+## v1.1.0
 
 ### 🧱 Arquitetura modular (Ports & Adapters)
 
@@ -88,15 +88,25 @@ These changes reduce console noise, improve fidelity of book styling, and keep t
   - `ui/`: `ErrorBoundary` para evitar que erros derrubem o leitor
 - `EpubReader.tsx` passou a orquestrar essas peças; `EpubView.tsx` envolve o leitor com `ErrorBoundary`.
 
-### 🧰 Confiabilidade e UX
+### � Testes e Confiabilidade
 
 - Supressão de avisos de CSP escopada apenas ao iframe do ePub (sem afetar o console global)
 - Sanitização centralizada: remoção de scripts, inlining de CSS com resolução de `@import`, remoção seletiva de `url(blob:)` em estilos inline
 - Comportamento preservado (tema, progresso, leitura); mudanças são internas e focadas em estabilidade
+- Adicionados testes unitários para o `core/sanitizer` (Vitest + jsdom)
 
 ### 📚 Documentação
 
 - Adicionado `ARCHITECTURE.md` descrevendo a arquitetura e pontos de integração
 - `README.md` ganhou uma seção “Architecture notes”
 - Pequenos ajustes em documentos auxiliares
+
+### ⚙️ Configurações e UI
+
+- Nova configuração: “Debug logging” (liga/desliga logs detalhados)
+- UI do leitor mais limpa: `ReaderControls` (controle de fonte) extraído para componente próprio
+
+### 🗃️ Storage (infra)
+
+- Adicionado adapter simples de LocalStorage (opcional, útil para testes e futuras evoluções)
 

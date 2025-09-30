@@ -6,13 +6,15 @@ export interface EpubPluginSettings {
 	notePath: string;
 	useSameFolder: boolean;
 	tags: string;
+  debugLogging?: boolean;
 }
 
 export const DEFAULT_SETTINGS: EpubPluginSettings = {
 	scrolledView: false,
 	notePath: '/',
 	useSameFolder: true,
-	tags: 'notes/booknotes'
+	tags: 'notes/booknotes',
+  debugLogging: false,
 }
 
 export class EpubSettingTab extends PluginSettingTab {
@@ -71,6 +73,16 @@ export class EpubSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					})
 			});
+
+    new Setting(containerEl)
+      .setName("Debug logging")
+      .setDesc("Enable verbose debug logs to help diagnose issues.")
+      .addToggle(toggle => toggle
+        .setValue(!!this.plugin.settings.debugLogging)
+        .onChange(async (value) => {
+          this.plugin.settings.debugLogging = value;
+          await this.plugin.saveSettings();
+        }));
 	}
 }
 

@@ -39,3 +39,8 @@ This plugin follows a lightweight Ports & Adapters structure:
 - UI: ErrorBoundary
 
 See `ARCHITECTURE.md` for details. This layout reduces regressions and makes features easier to evolve.
+
+### Development
+
+- Run production build: `npm run build`
+- Run tests (optional): `npm run test`

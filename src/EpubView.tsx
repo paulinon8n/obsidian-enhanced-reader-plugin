@@ -80,6 +80,7 @@ Date: ${moment().toLocaleString()}
           contents={contents}
           title={file.basename}
           storageKey={`epub-path-${file.path}`}
+          debugLogging={this.settings.debugLogging}
           scrolled={this.settings.scrolledView}
           tocOffset={tocOffset}
           tocBottomOffset={tocBottomOffset}

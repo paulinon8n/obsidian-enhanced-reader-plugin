@@ -8,9 +8,10 @@ import { useDarkMode } from './hooks/useDarkMode';
 import { applyFontSize, applyTheme } from './adapters/epubjs/theme';
 import { createDefaultSanitizer } from './core/sanitizer';
 import { registerContentHook } from './adapters/epubjs/contentHook';
-import { ConsoleLogger } from './core/logger';
+import { createConsoleLogger } from './core/logger';
+import { ReaderControls } from './ui/ReaderControls';
 
-export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffset, leaf, storageKey }: {
+export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffset, leaf, storageKey, debugLogging }: {
   contents: ArrayBuffer;
   title: string;
   scrolled: boolean;
@@ -18,6 +19,7 @@ export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffs
   tocBottomOffset: number;
   leaf: WorkspaceLeaf;
   storageKey?: string; // optional unique key for saving location (defaults to title-based)
+  debugLogging?: boolean;
 }) => {
   // Prefer a unique key per file to avoid collisions; fallback keeps backward compatibility
   const resolvedStorageKey = storageKey ?? `epub-${title}`;
@@ -76,19 +78,11 @@ export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffs
   // Note: We intentionally avoid migrating old storage keys at runtime to keep initialization simple and stable.
   // If needed later, we can provide a manual migration or dual-write strategy.
 
+  const logger = createConsoleLogger(!!debugLogging);
+
   return (
     <div style={{ height: "100vh" }}>
-      <div style={{ padding: '10px' }}>
-        <label htmlFor="fontSizeSlider">Adjust Font Size: </label>
-        <input
-          id="fontSizeSlider"
-          type="range"
-          min="80"
-          max="160"
-          value={fontSize}
-          onChange={e => setFontSize(parseInt(e.target.value))}
-        />
-      </div>
+      <ReaderControls fontSize={fontSize} onFontSizeChange={setFontSize} />
       <ReactReader
         title={title}
         showToc={true}
@@ -99,7 +93,7 @@ export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffs
         getRendition={(rendition: Rendition) => {
           renditionRef.current = rendition;
           // Configure rendition to handle CSP issues via adapter-hook and core sanitizer
-          rendition.hooks.content.register((c: Contents) => registerContentHook(c, sanitizer, ConsoleLogger));
+          rendition.hooks.content.register((c: Contents) => registerContentHook(c, sanitizer, logger));
 
           updateTheme(rendition, isDarkMode ? 'dark' : 'light');
           updateFontSize(fontSize);

@@ -1,11 +1,13 @@
 {
 	"name": "obsidian-enhanced-reader-plugin",
-	"version": "1.0.2",
+	"version": "1.1.0",
 	"description": "This is an enhanced ePub reader plugin for Obsidian. Can open document with \".epub\" file extension.",
 	"main": "src/main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"test": "vitest run",
+		"test:watch": "vitest",
 		"version": "node version-bump.mjs && git add manifest.json versions.json"
 	},
 	"keywords": [
@@ -24,9 +26,11 @@
 		"@typescript-eslint/parser": "^5.2.0",
 		"builtin-modules": "^3.2.0",
 		"esbuild": "^0.13.12",
+		"jsdom": "^20.0.3",
 		"obsidian": "latest",
 		"tslib": "^2.3.1",
-		"typescript": "^4.4.4"
+		"typescript": "^4.4.4",
+		"vitest": "^0.34.6"
 	},
 	"dependencies": {
 		"epubjs": "^0.3.93",
