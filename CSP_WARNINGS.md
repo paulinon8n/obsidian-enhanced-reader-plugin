@@ -38,6 +38,12 @@ Blocked script execution in 'about:srcdoc' because the document's frame is sandb
 
 The plugin includes built-in warning suppression for known CSP issues. These warnings are cosmetic and don't indicate actual problems with the plugin.
 
+### Implementation details
+
+- The suppression is scoped to the ePub iframe only (does not override the global console)
+- The DOM sanitizer removes scripts and inlines stylesheets when possible, reducing CSP noise
+- Inline styles using `url(blob:...)` are stripped selectively to avoid violations without losing layout
+
 ---
 
 *If you experience actual functionality issues (not just console warnings), please report them on the GitHub repository.*

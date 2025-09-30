@@ -28,3 +28,14 @@ This is an enhanced ePub reader plugin for Obsidian (https://obsidian.md). Can o
 ### Manually installing the plugin
 
 - Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/obsidian-enhanced-reader-plugin/`.
+
+### Architecture notes
+
+This plugin follows a lightweight Ports & Adapters structure:
+
+- Core (pure TS): logging, storage contract, sanitizer
+- Adapters (epub.js): content hook and theme application
+- Hooks: dark-mode detection
+- UI: ErrorBoundary
+
+See `ARCHITECTURE.md` for details. This layout reduces regressions and makes features easier to evolve.

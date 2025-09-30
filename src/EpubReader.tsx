@@ -4,69 +4,50 @@ import { WorkspaceLeaf } from 'obsidian';
 import { ReactReader, ReactReaderStyle, type IReactReaderStyle } from 'react-reader';
 import type { Contents, Rendition } from 'epubjs';
 import useLocalStorageState from 'use-local-storage-state';
+import { useDarkMode } from './hooks/useDarkMode';
+import { applyFontSize, applyTheme } from './adapters/epubjs/theme';
+import { createDefaultSanitizer } from './core/sanitizer';
+import { registerContentHook } from './adapters/epubjs/contentHook';
+import { ConsoleLogger } from './core/logger';
 
-export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffset, leaf }: {
+export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffset, leaf, storageKey }: {
   contents: ArrayBuffer;
   title: string;
   scrolled: boolean;
   tocOffset: number;
   tocBottomOffset: number;
   leaf: WorkspaceLeaf;
+  storageKey?: string; // optional unique key for saving location (defaults to title-based)
 }) => {
-  const [location, setLocation] = useLocalStorageState<string | number>(`epub-${title}`, { defaultValue: 0 });
+  // Prefer a unique key per file to avoid collisions; fallback keeps backward compatibility
+  const resolvedStorageKey = storageKey ?? `epub-${title}`;
+  const [location, setLocation] = useLocalStorageState<string | number | undefined>(resolvedStorageKey, { defaultValue: undefined });
   const renditionRef = useRef<Rendition | null>(null);
-  const [fontSize, setFontSize] = useState(100); 
-
-  const isDarkMode = document.body.classList.contains('theme-dark');
-
-  // Add console suppression for common CSP warnings
-  useEffect(() => {
-    const originalConsoleWarn = console.warn;
-    const originalConsoleError = console.error;
-    
-    console.warn = (...args) => {
-      const message = args.join(' ');
-      // Suppress known CSP warnings that don't affect functionality
-      if (message.includes('Content Security Policy') && 
-          (message.includes('blob:') || message.includes('srcdoc'))) {
-        return; // Suppress these specific warnings
-      }
-      originalConsoleWarn.apply(console, args);
-    };
-    
-    console.error = (...args) => {
-      const message = args.join(' ');
-      // Suppress known CSP errors that don't affect functionality
-      if (message.includes('Content Security Policy') && 
-          (message.includes('blob:') || message.includes('srcdoc'))) {
-        return; // Suppress these specific errors
-      }
-      originalConsoleError.apply(console, args);
-    };
-    
-    return () => {
-      console.warn = originalConsoleWarn;
-      console.error = originalConsoleError;
-    };
-  }, []);
+  const [fontSize, setFontSize] = useState(100);
+  const isDarkMode = useDarkMode();
 
   const locationChanged = useCallback((epubcifi: string | number) => {
     setLocation(epubcifi);
   }, [setLocation]);
 
   const updateTheme = useCallback((rendition: Rendition, theme: 'light' | 'dark') => {
-    const themes = rendition.themes;
-    themes.override('color', theme === 'dark' ? '#fff' : '#000');
-    themes.override('background', theme === 'dark' ? '#000' : '#fff');
+    applyTheme(rendition, theme);
   }, []);
 
   const updateFontSize = useCallback((size: number) => {
-    renditionRef.current?.themes.fontSize(`${size}%`);
+    if (renditionRef.current) applyFontSize(renditionRef.current, size);
   }, []);
 
   useEffect(() => {
     updateFontSize(fontSize);
   }, [fontSize, updateFontSize]);
+
+  // Re-apply theme overrides when Obsidian theme changes
+  useEffect(() => {
+    if (renditionRef.current) {
+      updateTheme(renditionRef.current, isDarkMode ? 'dark' : 'light');
+    }
+  }, [isDarkMode, updateTheme]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -85,6 +66,15 @@ export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffs
   }, [leaf]);
 
   const readerStyles = isDarkMode ? darkReaderTheme : lightReaderTheme;
+
+  const sanitizer = React.useMemo(() => createDefaultSanitizer({
+    inlineStylesheets: true,
+    removeScripts: true,
+    stripBlobUrlsInInlineStyles: true,
+  }), []);
+
+  // Note: We intentionally avoid migrating old storage keys at runtime to keep initialization simple and stable.
+  // If needed later, we can provide a manual migration or dual-write strategy.
 
   return (
     <div style={{ height: "100vh" }}>
@@ -108,37 +98,9 @@ export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffs
         url={contents}
         getRendition={(rendition: Rendition) => {
           renditionRef.current = rendition;
-          
-          // Configure rendition to handle CSP issues
-          rendition.hooks.content.register((contents: Contents) => {
-            const body = contents.window.document.body;
-            const doc = contents.window.document;
-            
-            // Disable context menu
-            body.oncontextmenu = () => false;
-            
-            // Remove problematic scripts and external resources to avoid CSP violations
-            try {
-              const scripts = doc.querySelectorAll('script');
-              scripts.forEach(script => script.remove());
-              
-              // Remove external stylesheets that might cause blob URL issues
-              const externalLinks = doc.querySelectorAll('link[rel="stylesheet"][href^="http"], link[rel="stylesheet"][href^="blob:"]');
-              externalLinks.forEach(link => link.remove());
-              
-              // Sanitize inline styles that might contain problematic URLs
-              const elementsWithStyle = doc.querySelectorAll('[style]');
-              elementsWithStyle.forEach(element => {
-                const style = element.getAttribute('style');
-                if (style && (style.includes('url(blob:') || style.includes('url(data:'))) {
-                  element.removeAttribute('style');
-                }
-              });
-            } catch (error) {
-              console.warn('Enhanced Reader: Error sanitizing ePub content:', error);
-            }
-          });
-          
+          // Configure rendition to handle CSP issues via adapter-hook and core sanitizer
+          rendition.hooks.content.register((c: Contents) => registerContentHook(c, sanitizer, ConsoleLogger));
+
           updateTheme(rendition, isDarkMode ? 'dark' : 'light');
           updateFontSize(fontSize);
         }}

@@ -3,6 +3,7 @@ import * as React from 'react';
 import * as ReactDOM from 'react-dom';
 import { EpubPluginSettings } from "./EpubPluginSettings";
 import { EpubReader } from "./EpubReader";
+import { ErrorBoundary } from './ui/ErrorBoundary';
 
 export const EPUB_FILE_EXTENSION = "epub";
 export const VIEW_TYPE_EPUB = "epub";
@@ -74,13 +75,16 @@ Date: ${moment().toLocaleString()}
 
     const contents = await this.app.vault.adapter.readBinary(file.path);
     ReactDOM.render(
-      <EpubReader
-        contents={contents}
-        title={file.basename}
-        scrolled={this.settings.scrolledView}
-        tocOffset={tocOffset}
-        tocBottomOffset={tocBottomOffset}
-        leaf={this.leaf} />,
+      <ErrorBoundary>
+        <EpubReader
+          contents={contents}
+          title={file.basename}
+          storageKey={`epub-path-${file.path}`}
+          scrolled={this.settings.scrolledView}
+          tocOffset={tocOffset}
+          tocBottomOffset={tocBottomOffset}
+          leaf={this.leaf} />
+      </ErrorBoundary>,
       this.contentEl
     );
   }

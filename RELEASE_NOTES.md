@@ -74,3 +74,29 @@ These changes reduce console noise, improve fidelity of book styling, and keep t
 ### 🧹 Chore
 
 - Bump de versão para `1.0.2` e sincronização de `manifest.json` e `versions.json`.
+
+---
+
+## Unreleased
+
+### 🧱 Arquitetura modular (Ports & Adapters)
+
+- Refatoração para camadas, reduzindo risco de regressões e facilitando testes e evolução:
+  - `core/`: lógica pura (sanitização, logger, contratos de storage)
+  - `adapters/epubjs/`: integração com epub.js (hook de conteúdo, aplicação de tema e fonte)
+  - `hooks/`: `useDarkMode` para detectar o tema do Obsidian reativamente
+  - `ui/`: `ErrorBoundary` para evitar que erros derrubem o leitor
+- `EpubReader.tsx` passou a orquestrar essas peças; `EpubView.tsx` envolve o leitor com `ErrorBoundary`.
+
+### 🧰 Confiabilidade e UX
+
+- Supressão de avisos de CSP escopada apenas ao iframe do ePub (sem afetar o console global)
+- Sanitização centralizada: remoção de scripts, inlining de CSS com resolução de `@import`, remoção seletiva de `url(blob:)` em estilos inline
+- Comportamento preservado (tema, progresso, leitura); mudanças são internas e focadas em estabilidade
+
+### 📚 Documentação
+
+- Adicionado `ARCHITECTURE.md` descrevendo a arquitetura e pontos de integração
+- `README.md` ganhou uma seção “Architecture notes”
+- Pequenos ajustes em documentos auxiliares
+
