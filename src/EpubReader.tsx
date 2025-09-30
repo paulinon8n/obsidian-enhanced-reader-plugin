@@ -19,6 +19,37 @@ export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffs
 
   const isDarkMode = document.body.classList.contains('theme-dark');
 
+  // Add console suppression for common CSP warnings
+  useEffect(() => {
+    const originalConsoleWarn = console.warn;
+    const originalConsoleError = console.error;
+    
+    console.warn = (...args) => {
+      const message = args.join(' ');
+      // Suppress known CSP warnings that don't affect functionality
+      if (message.includes('Content Security Policy') && 
+          (message.includes('blob:') || message.includes('srcdoc'))) {
+        return; // Suppress these specific warnings
+      }
+      originalConsoleWarn.apply(console, args);
+    };
+    
+    console.error = (...args) => {
+      const message = args.join(' ');
+      // Suppress known CSP errors that don't affect functionality
+      if (message.includes('Content Security Policy') && 
+          (message.includes('blob:') || message.includes('srcdoc'))) {
+        return; // Suppress these specific errors
+      }
+      originalConsoleError.apply(console, args);
+    };
+    
+    return () => {
+      console.warn = originalConsoleWarn;
+      console.error = originalConsoleError;
+    };
+  }, []);
+
   const locationChanged = useCallback((epubcifi: string | number) => {
     setLocation(epubcifi);
   }, [setLocation]);
@@ -40,9 +71,9 @@ export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffs
   useEffect(() => {
     const handleResize = () => {
       const epubContainer = leaf.view.containerEl.querySelector('div.epub-container');
-      if (!epubContainer) return;
+      if (!epubContainer || !epubContainer.parentElement) return;
 
-      const viewContentStyle = getComputedStyle(epubContainer.parentElement!);
+      const viewContentStyle = getComputedStyle(epubContainer.parentElement);
       renditionRef.current?.resize(
         parseFloat(viewContentStyle.width),
         parseFloat(viewContentStyle.height)
@@ -77,18 +108,49 @@ export const EpubReader = ({ contents, title, scrolled, tocOffset, tocBottomOffs
         url={contents}
         getRendition={(rendition: Rendition) => {
           renditionRef.current = rendition;
+          
+          // Configure rendition to handle CSP issues
           rendition.hooks.content.register((contents: Contents) => {
             const body = contents.window.document.body;
+            const doc = contents.window.document;
+            
+            // Disable context menu
             body.oncontextmenu = () => false;
+            
+            // Remove problematic scripts and external resources to avoid CSP violations
+            try {
+              const scripts = doc.querySelectorAll('script');
+              scripts.forEach(script => script.remove());
+              
+              // Remove external stylesheets that might cause blob URL issues
+              const externalLinks = doc.querySelectorAll('link[rel="stylesheet"][href^="http"], link[rel="stylesheet"][href^="blob:"]');
+              externalLinks.forEach(link => link.remove());
+              
+              // Sanitize inline styles that might contain problematic URLs
+              const elementsWithStyle = doc.querySelectorAll('[style]');
+              elementsWithStyle.forEach(element => {
+                const style = element.getAttribute('style');
+                if (style && (style.includes('url(blob:') || style.includes('url(data:'))) {
+                  element.removeAttribute('style');
+                }
+              });
+            } catch (error) {
+              console.warn('Enhanced Reader: Error sanitizing ePub content:', error);
+            }
           });
+          
           updateTheme(rendition, isDarkMode ? 'dark' : 'light');
           updateFontSize(fontSize);
         }}
         epubOptions={scrolled ? {
-          allowPopups: true,
+          allowPopups: false, // Disable popups to avoid CSP issues
+          allowScriptedContent: false, // Disable scripts to avoid sandbox issues
           flow: "scrolled",
           manager: "continuous",
-        } : undefined}
+        } : {
+          allowPopups: false, // Disable popups to avoid CSP issues
+          allowScriptedContent: false, // Disable scripts to avoid sandbox issues
+        }}
         readerStyles={readerStyles}
       />
     </div>
