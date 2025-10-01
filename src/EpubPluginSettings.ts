@@ -1,20 +1,56 @@
 import { App, PluginSettingTab, Setting, TFolder, Vault } from "obsidian";
 import EpubPlugin from "./EpubPlugin";
+import type { FontFamilyChoice, ThemeMode } from "./adapters/epubjs/theme";
+
+export type ToolbarState = {
+	fontSize: number;
+	fontFamily: FontFamilyChoice;
+	bionic: boolean;
+	theme?: ThemeMode;
+};
 
 export interface EpubPluginSettings {
 	scrolledView: boolean;
 	notePath: string;
 	useSameFolder: boolean;
 	tags: string;
-  debugLogging?: boolean;
+	debugLogging?: boolean;
+	// New: per-book overrides and synced state
+	perBookTags?: Record<string, string>; // filePath -> tags string
+	highlights?: Record<string, HighlightEntry[]>; // filePath -> list
+	locations?: Record<string, string | number>; // filePath -> epub cfi or number
+	toolbarState?: Record<string, ToolbarState>;
+	toolbarDefaults?: ToolbarState;
 }
+
+export type HighlightEntry = {
+	cfi: string;
+	text: string;
+	chapter?: string;
+	createdAt: string; // ISO
+	// New fields for enhanced functionality (all optional for backward compatibility)
+	comment?: string;      // User's comment/note about this highlight
+	tags?: string[];       // User-defined tags for organization
+	updatedAt?: string;    // ISO timestamp of last edit
+	color?: string;        // Highlight color (future feature)
+};
 
 export const DEFAULT_SETTINGS: EpubPluginSettings = {
 	scrolledView: false,
 	notePath: '/',
 	useSameFolder: true,
 	tags: 'notes/booknotes',
-  debugLogging: false,
+	debugLogging: false,
+	perBookTags: {},
+	highlights: {},
+	locations: {},
+	toolbarState: {},
+	toolbarDefaults: {
+		fontSize: 100,
+		fontFamily: 'system',
+		bionic: false,
+		theme: undefined,
+	},
 }
 
 export class EpubSettingTab extends PluginSettingTab {

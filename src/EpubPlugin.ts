@@ -1,4 +1,4 @@
-import { addIcon, Plugin, WorkspaceLeaf } from 'obsidian';
+import { addIcon, Plugin, WorkspaceLeaf, TFile } from 'obsidian';
 import { EpubPluginSettings, EpubSettingTab, DEFAULT_SETTINGS } from './EpubPluginSettings';
 import { EpubView, EPUB_FILE_EXTENSION, ICON_EPUB, VIEW_TYPE_EPUB } from './EpubView';
 
@@ -25,9 +25,7 @@ export default class EpubPlugin extends Plugin {
 			/>
 		`);
 
-		this.registerView(VIEW_TYPE_EPUB, (leaf: WorkspaceLeaf) => {
-			return new EpubView(leaf, this.settings);
-		});
+		this.registerView(VIEW_TYPE_EPUB, (leaf: WorkspaceLeaf) => new EpubView(leaf, this.settings, this));
 
 		try {
 			this.registerExtensions([EPUB_FILE_EXTENSION], VIEW_TYPE_EPUB);
@@ -36,6 +34,34 @@ export default class EpubPlugin extends Plugin {
 		}
 
 		this.addSettingTab(new EpubSettingTab(this.app, this));
+
+		// obsidian://enhanced-reader?file=<encoded path>&cfi=<encoded cfi>
+		this.registerObsidianProtocolHandler('enhanced-reader', async (params) => {
+			try {
+				const filePath = params['file'];
+				const cfi = params['cfi'];
+				if (!filePath) return;
+				const file = this.app.vault.getAbstractFileByPath(filePath);
+				if (!file) return;
+				const leaf = this.app.workspace.getLeaf(true);
+				// Open the epub file, then deliver the CFI to the view
+				if (file instanceof TFile) {
+					await leaf.openFile(file);
+				}
+				const view = leaf.view;
+				if (view && 'getViewType' in view && view.getViewType() === VIEW_TYPE_EPUB) {
+					// Set a pending CFI on the view so it can pass into the reader component
+					(view as EpubView).pendingCfi = cfi || undefined;
+					// Trigger a reload of the current file so the reader receives the override
+					const epubView = view as EpubView;
+					if (typeof epubView.onLoadFile === 'function' && epubView.file) {
+						await epubView.onLoadFile(epubView.file);
+					}
+				}
+			} catch (e) {
+				console.warn('Enhanced Reader protocol handler error', e);
+			}
+		});
 	}
 
 	onunload() {

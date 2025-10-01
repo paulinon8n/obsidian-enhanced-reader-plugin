@@ -27,6 +27,12 @@ Este documento orienta contribuições e explica como trabalhar com a arquitetur
 - Build de produção: `npm run build`
 - Dev (watch): `npm run dev`
 
+### Fonte OpenDyslexic (pré-build)
+
+- O passo de `prebuild` executa `scripts/generate-open-dyslexic.mjs`.
+- Esse script lê as fontes `.woff` do pacote `open-dyslexic`, gera `src/assets/OpenDyslexicCss.ts` com regras `@font-face` em data URLs e o build injeta esse CSS no iframe do ePub.
+- Não é necessário manter arquivos `.woff` no bundle final — a distribuição continua com `main.js`, `manifest.json`, `styles.css`.
+
 ## Dicas de contribuição
 
 - Mantenha o core sem dependências do Obsidian/React

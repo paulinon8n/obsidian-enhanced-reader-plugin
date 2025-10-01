@@ -4,12 +4,29 @@
 
 This is an enhanced ePub reader plugin for Obsidian (https://obsidian.md). Can open document with `.epub` file extension.
 
-- [Obsidian Enhanced Reader Plugin](#obsidian-enhanced-reader-plugin)
-  - [How to use](#how-to-use)
-    - [1. Put books into any vault folder](#1-put-books-into-any-vault-folder)
-    - [2. Click book to open an epub view](#2-click-book-to-open-an-epub-view)
-    - [3. Reading](#3-reading)
-  - [Manually installing the plugin](#manually-installing-the-plugin)
+### ✨ Key Features
+
+- 📚 **Full EPUB Support**: Read `.epub` files directly in Obsidian
+- 🔍 **In-Book Search**: Search within the entire book with result navigation and excerpts
+- ✏️ **Highlight Management**: Create, view, and remove highlights with context-aware interface
+- 🎨 **Theme Control**: Light, Dark, or Sepia themes (auto-follows Obsidian theme)
+- 🔤 **Font Customization**: Adjustable size (80-160%) and family (System/Sans/Serif/OpenDyslexic)
+- 🧠 **Bionic Reading**: Experimental mode to assist with dyslexia/ADHD
+- 💾 **Persistent Settings**: Per-book preferences for reading position, theme, font, and highlights
+- 📝 **Note Integration**: Export selections to notes with citations and deep links
+- 📑 **Table of Contents**: Interactive navigation through book chapters
+
+### Table of Contents
+
+- [How to use](#how-to-use)
+- [Features](#features)
+  - [Highlight Management](#highlight-management)
+  - [Search Functionality](#search-functionality)
+  - [Toolbar and Preferences](#toolbar-and-preferences)
+- [Installation](#manually-installing-the-plugin)
+- [Settings](#settings)
+- [Development](#development)
+- [Changelog](#changelog)
 
 ### How to use
 
@@ -29,6 +46,62 @@ This is an enhanced ePub reader plugin for Obsidian (https://obsidian.md). Can o
 
 - Copy over `main.js`, `styles.css`, `manifest.json` to your vault `VaultFolder/.obsidian/plugins/obsidian-enhanced-reader-plugin/`.
 
+## Features
+
+### Highlight Management
+
+**Creating Highlights:**
+1. Select any text in the EPUB
+2. Click the "Destacar" (Highlight) button in the toolbar
+3. The text is highlighted in yellow and saved automatically
+
+**Removing Highlights:**
+1. Select text within an existing highlight (drag to select)
+2. Notice the green badge: "Destaque existente detectado" (Existing highlight detected)
+3. Click the red "Remover destaque" (Remove highlight) button
+4. The highlight is permanently removed
+
+**Features:**
+- ✅ Highlights persist across reading sessions
+- ✅ Automatic detection of existing highlights when selecting text
+- ✅ Visual feedback (green badge) when highlighting existing text
+- ✅ Context-aware toolbar that adapts to selection type
+- ✅ Export highlighted text to notes with citations
+
+### Search Functionality
+
+**How to Search:**
+1. Click the search icon (magnifying glass) in the toolbar
+2. Enter your search query
+3. Navigate through results with Previous/Next buttons
+4. Click "Clear" to remove search highlights
+
+**Features:**
+- ✅ Full-text search across the entire book
+- ✅ Result count and current position indicator
+- ✅ Excerpts showing context around matches
+- ✅ Chapter information for each result
+- ✅ Temporary highlighting of search results
+- ✅ Keyboard navigation support
+
+### Toolbar and preferences
+
+- Theme selector in the reader toolbar (native Obsidian icons):
+  - Light (sun), Sepia (palette), Dark (moon)
+  - If you don't pick a theme, the reader follows Obsidian's light/dark automatically
+- Font size slider (80%–160%)
+- Font family selector: System / Sans / Serif / OpenDyslexic (embutida e 100% offline)
+- Bionic Reading mode (experimental): emphasizes the start of words to assist dyslexia/ADHD — can be toggled on/off
+- In-book search: open the magnifier icon to search the current title, jump through the matches, and preview excerpts before navigating
+- Your preferences are saved per book (per-file):
+  - Reading position (where you stopped)
+  - Font size
+  - Theme choice (if you explicitly select one)
+  - Font family and Bionic mode
+  - Latest toolbar adjustments become the default for newly opened books (you can still override per title)
+  - Highlights: your manual highlights are persisted per book and restored on reopen. You can also export a selection to the companion note with an automatic citation and a deep link back to the exact location in the book.
+  - **Highlight management**: Click on any existing highlight to remove it. A toolbar will appear with removal options.
+
 ### Architecture notes
 
 This plugin follows a lightweight Ports & Adapters structure:
@@ -43,6 +116,7 @@ See `ARCHITECTURE.md` for details. This layout reduces regressions and makes fea
 ### Development
 
 - Run production build: `npm run build`
+- Build embeds the OpenDyslexic font rules into the bundle during the `prebuild` step.
 - Run tests (optional): `npm run test`
 
 ### Settings
