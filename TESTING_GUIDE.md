@@ -1,4 +1,4 @@
-# 🧪 GUIA DE TESTE - Fase 1
+# 🧪 GUIA DE TESTE - Highlights com Menu de Contexto
 
 ## 🎯 Teste Rápido (30 segundos)
 
@@ -17,9 +17,9 @@
 2. **Abra um epub com destaques**
    - Qualquer livro que já tenha texto destacado em amarelo
 
-3. **CLIQUE** (não arraste!) em um destaque amarelo
-   - Você deve ver o cursor virar uma mãozinha ao passar sobre o destaque
-   - Um menu popup deve aparecer instantaneamente
+3. **CLIQUE COM BOTÃO DIREITO** em um destaque amarelo
+   - Você deve ver o cursor com ícone de menu de contexto ao passar sobre o destaque
+   - Um menu popup deve aparecer na posição do mouse
 
 4. **Teste as opções do menu**
    - ✅ Ver detalhes → mostra notificação com informações
@@ -37,16 +37,16 @@
 - Passe o mouse sobre um destaque
 
 **Resultado esperado:**
-- ✅ Cursor vira mãozinha (pointer)
+- ✅ Cursor vira ícone de menu de contexto (context-menu)
 - ✅ Destaque fica mais intenso (opacity 0.2 → 0.35)
 - ✅ Transição suave (0.15s)
 
 ---
 
-### Teste 2: Menu Contextual
+### Teste 2: Menu Contextual (Botão Direito)
 
 **O que testar:**
-- Clique em um destaque
+- Clique com BOTÃO DIREITO em um destaque
 
 **Resultado esperado:**
 - ✅ Menu aparece na posição do mouse
@@ -58,6 +58,16 @@
   5. Remover destaque (ícone: trash)
 
 ---
+
+### Teste 2.1: Botão Esquerdo NÃO Abre Menu
+
+**O que testar:**
+- Clique com BOTÃO ESQUERDO em um destaque
+
+**Resultado esperado:**
+- ✅ Menu NÃO aparece
+- ✅ Permite leitura normal sem interrupção
+- ✅ Não interfere com navegação do ebook
 
 ### Teste 3: Ver Detalhes
 

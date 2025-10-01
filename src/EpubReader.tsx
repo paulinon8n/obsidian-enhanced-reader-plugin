@@ -425,31 +425,49 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
       createdAt: new Date().toISOString(),
     };
 
-    const clickHandler = (event: MouseEvent) => {
-      event.preventDefault();
-      event.stopPropagation();
-      showHighlightContextMenu(event, {
-        highlight,
-        onEdit: undefined,
-        onRemove: (hCfi) => handleRemoveHighlight(hCfi),
-        onCopy: (text) => copyToClipboard(text),
-        onNavigate: (goCfi) => rendition.display(goCfi),
+    // Callback is called on click events - use it to attach contextmenu listener
+    const clickCallback = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      
+      // Check if we already attached contextmenu listener
+      if (target.dataset.contextmenuAttached) return;
+      
+      // Mark as attached
+      target.dataset.contextmenuAttached = 'true';
+      
+      // Add contextmenu event listener
+      target.addEventListener('contextmenu', (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        logger.debug?.('Contextmenu on highlight:', highlight.cfi);
+        
+        showHighlightContextMenu(e, {
+          highlight,
+          onEdit: undefined,
+          onRemove: (hCfi) => handleRemoveHighlight(hCfi),
+          onCopy: (text) => copyToClipboard(text),
+          onNavigate: (goCfi) => rendition.display(goCfi),
+        });
       });
+      
+      logger.debug?.('Contextmenu listener attached to highlight:', cfi);
     };
 
     try {
       rendition.annotations.add(
         "highlight",
         cfi,
-        { highlightId: cfi },
-        clickHandler,
+        { highlightId: cfi, highlightData: highlight },
+        clickCallback, // Use callback to attach contextmenu listener
         "highlight-clickable",
         {
           fill: "yellow",
           "fill-opacity": 0.2,
-          cursor: "pointer",
         }
       );
+      
+      logger.debug?.(`Added highlight: ${cfi}`);
     } catch (error) {
       logger.warn?.("Failed to add clickable highlight", error);
     }
@@ -738,7 +756,7 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
                   }
                 });
 
-                // Add highlights with retry logic and click handlers
+                // Add highlights with callback to attach contextmenu listeners
                 for (const highlight of initialHighlights) {
                   // Basic CFI validation
                   if (!highlight.cfi || typeof highlight.cfi !== 'string' || !highlight.cfi.startsWith('epubcfi(')) {
@@ -746,64 +764,47 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
                     continue;
                   }
 
-                  // NEW: Click handler for context menu
-                  const clickHandler = (event: MouseEvent) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    logger.debug?.('Highlight clicked:', highlight.cfi);
+                  // Callback to attach contextmenu listener on first click
+                  const clickCallback = (event: MouseEvent) => {
+                    const target = event.target as HTMLElement;
                     
-                    // Show context menu
-                    showHighlightContextMenu(event, {
-                      highlight,
-                      onEdit: undefined, // TODO: Will implement in next phase
-                      onRemove: (cfi) => {
-                        handleRemoveHighlight(cfi);
-                      },
-                      onCopy: (text) => {
-                        copyToClipboard(text);
-                      },
-                      onNavigate: (cfi) => {
-                        rendition.display(cfi);
-                      },
+                    if (target.dataset.contextmenuAttached) return;
+                    target.dataset.contextmenuAttached = 'true';
+                    
+                    target.addEventListener('contextmenu', (e: MouseEvent) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      
+                      logger.debug?.('Contextmenu on highlight:', highlight.cfi);
+                      
+                      showHighlightContextMenu(e, {
+                        highlight,
+                        onEdit: undefined,
+                        onRemove: (cfi) => handleRemoveHighlight(cfi),
+                        onCopy: (text) => copyToClipboard(text),
+                        onNavigate: (cfi) => rendition.display(cfi),
+                      });
                     });
+                    
+                    logger.debug?.('Contextmenu listener attached:', highlight.cfi);
                   };
 
                   try {
                     await rendition.annotations.add(
                       "highlight", 
                       highlight.cfi, 
-                      { highlightId: highlight.cfi }, // Store ID in data
-                      clickHandler, // NEW: Click callback
-                      "highlight-clickable", // NEW: CSS class for styling
+                      { highlightId: highlight.cfi, highlightData: highlight },
+                      clickCallback,
+                      "highlight-clickable",
                       {
                         fill: highlight.color || "yellow",
                         "fill-opacity": 0.2,
-                        cursor: "pointer", // NEW: Show pointer cursor
                       }
                     );
+                    
                     logger.debug?.(`Successfully restored highlight: ${highlight.cfi}`);
                   } catch (error) {
                     logger.warn?.(`Failed to restore highlight for CFI: ${highlight.cfi}`, error);
-                    // Try again after a short delay - sometimes the content needs more time
-                    setTimeout(async () => {
-                      try {
-                        await rendition.annotations.add(
-                          "highlight", 
-                          highlight.cfi, 
-                          { highlightId: highlight.cfi },
-                          clickHandler,
-                          "highlight-clickable",
-                          {
-                            fill: highlight.color || "yellow",
-                            "fill-opacity": 0.2,
-                            cursor: "pointer",
-                          }
-                        );
-                        logger.debug?.(`Retry successful for CFI: ${highlight.cfi}`);
-                      } catch (retryError) {
-                        logger.warn?.(`Retry failed for CFI: ${highlight.cfi}`, retryError);
-                      }
-                    }, 1000);
                   }
                 }
               };
@@ -820,17 +821,23 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
                     return;
                   }
                   
-                  // Click handler for context menu
-                  const clickHandler = (event: MouseEvent) => {
-                    event.preventDefault();
-                    event.stopPropagation();
+                  const clickCallback = (event: MouseEvent) => {
+                    const target = event.target as HTMLElement;
                     
-                    showHighlightContextMenu(event, {
-                      highlight,
-                      onEdit: undefined,
-                      onRemove: (cfi) => handleRemoveHighlight(cfi),
-                      onCopy: (text) => copyToClipboard(text),
-                      onNavigate: (cfi) => rendition.display(cfi),
+                    if (target.dataset.contextmenuAttached) return;
+                    target.dataset.contextmenuAttached = 'true';
+                    
+                    target.addEventListener('contextmenu', (e: MouseEvent) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      
+                      showHighlightContextMenu(e, {
+                        highlight,
+                        onEdit: undefined,
+                        onRemove: (cfi) => handleRemoveHighlight(cfi),
+                        onCopy: (text) => copyToClipboard(text),
+                        onNavigate: (cfi) => rendition.display(cfi),
+                      });
                     });
                   };
                   
@@ -838,13 +845,12 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
                     rendition.annotations.add(
                       "highlight", 
                       highlight.cfi, 
-                      { highlightId: highlight.cfi },
-                      clickHandler,
+                      { highlightId: highlight.cfi, highlightData: highlight },
+                      clickCallback,
                       "highlight-clickable",
                       {
                         fill: highlight.color || "yellow",
                         "fill-opacity": 0.2,
-                        cursor: "pointer",
                       }
                     );
                   } catch (error) {

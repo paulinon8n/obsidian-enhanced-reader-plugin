@@ -1,8 +1,8 @@
 /* Enhanced Reader Plugin Styles */
 
-/* Clickable highlights - show pointer cursor and hover effect */
+/* Clickable highlights - show context cursor and hover effect */
 .epub-container .highlight-clickable {
-  cursor: pointer !important;
+  cursor: context-menu !important;
   transition: fill-opacity 0.15s ease;
 }
 

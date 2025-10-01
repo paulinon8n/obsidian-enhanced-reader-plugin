@@ -129,4 +129,4 @@ See `ARCHITECTURE.md` for details. This layout reduces regressions and makes fea
 
 ### Changelog
 
-- Consulte o arquivo `RELEASE_NOTES.md` para ver o histórico de mudanças.
+See `CHANGELOG.md` for complete version history and detailed changes.
