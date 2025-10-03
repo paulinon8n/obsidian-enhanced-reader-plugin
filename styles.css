@@ -1,17 +1,52 @@
 /* Enhanced Reader Plugin Styles */
 
-/* Clickable highlights - show context cursor and hover effect */
-.epub-container .highlight-clickable {
-  cursor: context-menu !important;
-  transition: fill-opacity 0.15s ease;
+/* Visual treatment for persisted highlights */
+.epub-container .highlight-mark {
+  transition: fill-opacity 0.18s ease;
 }
 
-.epub-container .highlight-clickable:hover {
-  fill-opacity: 0.35 !important;
+.enhanced-reader-selection-dropdown {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 190px;
+  color: var(--text-normal);
 }
 
-/* Active highlight (when context menu is open) */
-.epub-container .highlight-clickable.active {
-  fill-opacity: 0.4 !important;
-  outline: 1px solid var(--interactive-accent);
+.enhanced-reader-selection-dropdown button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.enhanced-reader-selection-dropdown button:hover,
+.enhanced-reader-selection-dropdown button:focus {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+  outline: none;
+}
+
+.enhanced-reader-selection-dropdown button.secondary-action {
+  color: var(--text-muted);
+}
+
+.enhanced-highlight-clickable {
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.enhanced-highlight-clickable * {
+  pointer-events: auto;
 }

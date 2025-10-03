@@ -1,255 +1,240 @@
-# Desenvolvendo o Enhanced Reader
+# Contributing to Enhanced Reader
 
-Este documento orienta contribuições e explica como trabalhar com a arquitetura modular.
+<!-- markdownlint-disable MD022 MD031 MD032 MD034 MD040 -->
 
-## 🎯 Filosofia de Desenvolvimento
+## Filosofia Arquitetural
 
-Este plugin segue uma **evolução arquitetural contínua** baseada no padrão **Ports & Adapters**. A modularidade não é apenas um objetivo inicial, mas um compromisso permanente com:
+Este plugin adota **Ports & Adapters (Hexagonal Architecture)** como fundação permanente, não como objetivo inicial. Compromissos inegociáveis:
 
-- **Eficiencia e Eficácia** de maneira organizada.
-- **Melhoria contínua da testabilidade** 
-- **Facilitação de evolução** sem regressões
-- **Otimização de performance** através de arquitetura bem definida (Ports & Adapters)
+- **Eficiência e Eficácia** através de organização modular
+- **Testabilidade** como requisito, não afterthought
+- **Evolução sem regressão** via contratos bem definidos
+- **Performance** otimizada por design, não correção
 
-> 💡 **Princípio**: Cada nova feature deve evitar corromper o princípio arquitetura modular baseada em Ports & Adapters
+**Princípio fundamental**: Cada feature nova deve respeitar a separação de responsabilidades.
 
-## 📁 Estrutura Atual
+---
 
-### Core (TypeScript Puro - Zero Dependências)
+## Estrutura do Projeto
+
+### Core (TypeScript Puro)
+Zero dependências externas. Apenas lógica de negócio testável.
 
 ```
 core/
-├── cfiComparator.ts     # CFI (Canonical Fragment Identifier) comparison logic
-├── highlightIndex.ts    # Spatial indexing for performance optimization  
-├── logger.ts           # Interface de logging (ILogger)
-├── sanitizer.ts        # DOM sanitization (remove scripts, inline CSS, resolve @import)
-└── storage.ts          # Storage contract (IStorage)
+├── cfiComparator.ts     # Comparação de CFI (Canonical Fragment Identifier)
+├── highlightIndex.ts    # Indexação espacial para performance
+├── logger.ts            # Interface de logging (ILogger)
+├── sanitizer.ts         # Sanitização de DOM (remove scripts, resolve @import)
+└── storage.ts           # Contrato de storage (IStorage)
 ```
 
-**Princípio**: Código testável sem Obsidian/React, apenas lógica pura de negócio.
-
-### Adapters (Integrações com o Mundo Externo)
+### Adapters (Integrações)
+Ponte entre core e mundo externo (Obsidian, epub.js, etc).
 
 ```
 adapters/
 ├── epubjs/
-│   ├── contentHook.ts  # Integra sanitizer ao hook de conteúdo do epub.js
-│   └── theme.ts        # Aplica tema e fonte no Rendition
+│   ├── contentHook.ts           # Integra sanitizer ao epub.js e instala helpers
+│   ├── highlightHover.ts        # Gere sublinhado dinâmico em overlays do marks-pane
+│   └── theme.ts                 # Aplica tema no Rendition
 └── storage/
-    └── localStorageAdapter.ts  # Implementação de IStorage
+    └── localStorageAdapter.ts   # Implementação de IStorage
 ```
 
 ### Hooks (Estado Reativo)
-
 ```
 hooks/
-└── useDarkMode.ts      # Observa mudanças de tema do Obsidian
+└── useDarkMode.ts               # Observa mudanças de tema
 ```
 
-### UI Components (Interface Modular)
+### UI Components
 
-```
+```text
 ui/
-├── ErrorBoundary.tsx        # Captura erros de renderização
-├── HighlightContextMenu.ts  # Menu contextual para highlights
-└── ReaderControls.tsx       # Controles de toolbar (tema, fonte, busca)
+├── ErrorBoundary.tsx            # Captura erros de renderização
+├── ReaderControls.tsx           # Toolbar (tema, fonte, busca, destaques)
+└── HighlightContextMenu.ts      # Legado (mantido apenas para histórico)
 ```
 
-### Utils (Utilitários de Performance)
-
+### Utils & Assets
 ```
 utils/
-└── performance.ts      # Debounce, throttle para otimizações
-```
+└── performance.ts               # Debounce, throttle
 
-### Assets (Recursos Embutidos)
-
-```
 assets/
-└── OpenDyslexicCss.ts  # Fonte OpenDyslexic como data URLs (auto-gerada)
+└── OpenDyslexicCss.ts           # Fonte OpenDyslexic embarcada
 ```
 
 ### Componentes Principais
-
-- **`EpubPlugin.ts`**: Plugin principal que registra o visualizador no Obsidian
+- **`EpubPlugin.ts`**: Registra visualizador no Obsidian
 - **`EpubView.tsx`**: Gerencia ciclo de vida + ErrorBoundary
-- **`EpubReader.tsx`**: Orquestra todos os componentes (944 linhas → alvo de refatoração)
+- **`EpubReader.tsx`**: Orquestra componentes (944 LOC → alvo de refatoração)
 
-## ⚡ Comandos de Desenvolvimento
+---
+
+## Desenvolvimento
+
+### Comandos
 
 ```bash
-# Build de produção (com prebuild automático)
-npm run build
-
-# Desenvolvimento com watch mode
-npm run dev
-
-# Execução de testes
-npm run test              # Run once
-npm run test:watch        # Watch mode
-
-# Bump de versão (atualiza manifest.json e versions.json)
-npm run version
+npm run build         # Produção (com prebuild automático)
+npm run dev           # Watch mode
+npm run test          # Testes unitários
+npm run test:watch    # Testes em watch mode
+npm run version       # Bump de versão (manifest.json + versions.json)
 ```
 
-### 🎨 Pipeline de Build
+### Pipeline de Build
 
-1. **Prebuild**: `scripts/generate-open-dyslexic.mjs`
-   - Lê fontes `.woff` do pacote `open-dyslexic`
-   - Gera `src/assets/OpenDyslexicCss.ts` com regras `@font-face` em data URLs
-   - Permite fonte 100% offline sem dependências de sistema
+1. **Prebuild** (`scripts/generate-open-dyslexic.mjs`):
+   - Lê fontes `.woff` do pacote npm
+   - Gera `OpenDyslexicCss.ts` com data URLs
+   - Resultado: Fonte 100% offline
 
 2. **TypeScript Check**: Validação de tipos sem emissão
 
-3. **ESBuild**: Bundle otimizado para produção (~568KB)
+3. **ESBuild**: Bundle otimizado (~568KB)
 
-**Distribuição final**: Apenas `main.js`, `manifest.json`, `styles.css`
+**Saída final**: `main.js`, `manifest.json`, `styles.css`
 
-## 🏗️ Diretrizes Arquiteturais
+---
 
-### Estratégias de Refatoração Contínua
+## Padrões de Código
 
-**🎯 Objetivos de Modularidade:**
-
-1. **EpubReader.tsx** (944 linhas): Alvo prioritário para decomposição
-   - Extrair hooks especializados: `useHighlights`, `useSearch`, `useTheme`
-   - Separar lógica de estado da apresentação
-   - Meta: Reduzir linhas, deve ser focadas em orquestração
-
-2. **Performance Optimization**: 
-   - Spatial indexing já implementado (10-50x speedup)
-   - Debouncing em operações custosas
-   - Próximo: Lazy loading de componentes UI
-
-3. **Testing Strategy**:
-   - Core: 100% testável (zero dependências)
-   - Adapters: Mocking de dependências externas
-   - UI: Testing Library para componentes React
-
-### Processo de Contribuição
-
-**🔍 Análise Antes de Implementar:**
+### ✅ Boas Práticas
 
 ```typescript
-// ❌ Antipadrão: Misturar lógicas
-function handleClick() {
-  // DOM manipulation + Business logic + API calls
-}
-
-// ✅ Padrão: Separação de responsabilidades
-function handleClick() {
-  const result = core.processHighlight(data); // Pure logic
-  adapter.updateUI(result);                   // Side effects
+// Separação clara de responsabilidades
+function handleHighlightClick(event: MouseEvent) {
+  const result = highlightCore.process(data);  // Pure logic
+  storageAdapter.save(result);                 // Side effect
+  uiAdapter.update(result);                    // Side effect
 }
 ```
 
-**📋 Checklist para Novas Features:**
+### ❌ Antipadrões
 
-- [ ] Lógica de negócio vai para `core/` (testável independente)
-- [ ] Integrações externas vão para `adapters/`
-- [ ] UI components vão para `ui/` (composáveis)
-- [ ] Estado reativo vai para `hooks/`
-- [ ] Utilitários genéricos vão para `utils/`
-- [ ] Tests unitários criados (quando aplicável)
+```typescript
+// Mistura de lógicas (evitar)
+function handleClick() {
+  // DOM manipulation + Business logic + API calls juntos
+}
+```
+
+### Checklist para Novas Features
+
+- [ ] Lógica de negócio em `core/` (testável independentemente)
+- [ ] Integrações externas em `adapters/`
+- [ ] UI components em `ui/` (composáveis)
+- [ ] Estado reativo em `hooks/`
+- [ ] Testes unitários criados
 - [ ] Performance impact avaliado
 - [ ] Documentação atualizada
 
-## 🧪 Testing Strategy
+---
 
-```bash
-# Core modules (pure functions)
-test/core/sanitizer.test.ts
-test/core/cfiComparator.test.ts
-test/core/highlightIndex.test.ts
+## Testing Strategy
 
-# Adapters (with mocking)
-test/adapters/epubjs/contentHook.test.ts
-
-# UI components (with React Testing Library)
-test/ui/ReaderControls.test.tsx
+```
+test/
+├── highlightHover.test.ts   # Exercita helper de hover usando jsdom + SVG
+└── sanitizer.test.ts        # Garante sanitização de iframes/estilos
 ```
 
-**Filosofia**: Teste o comportamento, não a implementação.
+**Filosofia**: Teste comportamento, não implementação.
 
-## 🚨 Tratamento de Erros & Debugging
+---
+
+## Error Handling & Debugging
 
 ### Error Boundaries
-- **ErrorBoundary.tsx**: Captura erros de renderização React
-- **Graceful degradation**: Plugin continua funcionando mesmo com erros parciais
-- **User feedback**: Mensagens claras para o usuário
+- **ErrorBoundary.tsx** captura erros React
+- **Graceful degradation**: Plugin continua funcionando com erros parciais
+- **User feedback**: Mensagens claras
 
-### Logging Strategy
+### Logging Estruturado
 ```typescript
 import { logger } from './core/logger';
 
-// Structured logging with levels
-logger.info('Highlight created', { cfi, text: selection });
+logger.info('Highlight created', { cfi, text });
 logger.warn('Invalid CFI detected', { cfi, error });
 logger.error('Failed to save highlight', { error, context });
 ```
 
-### CSP (Content Security Policy) Management
+### CSP (Content Security Policy)
 
-### About the Warnings
+**Warnings Esperados** (não afetam funcionalidade):
 
-When using the Enhanced Reader Plugin, you may see Content Security Policy (CSP) warnings in the Obsidian console. These warnings are **expected? apparently do not affect functionality**.
-
-### Common Warnings
-
-**Stylesheet Blob URL Warnings:**
-```text
-Refused to load the stylesheet 'blob:app://obsidian.md/...' because it violates the following Content Security Policy directive
+```
+Refused to load stylesheet 'blob:app://obsidian.md/...'
+Blocked script execution in 'about:srcdoc'
 ```
 
-**Sandboxed Script Warnings:**
-```text
-Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed and the 'allow-scripts' permission is not set
-```
+**Motivo**: epub.js renderiza conteúdo em iframes sandboxed. Obsidian tem CSP estrito.
 
-### Why These Warnings Occur
+**Impacto**: ✅ Nenhum. Plugin funciona normalmente.
 
-1. **epub.js Architecture**: The epub.js library renders ePub content in sandboxed iframes for security
-2. **Obsidian's Security**: Obsidian has strict CSP rules to protect user data
-3. **ePub Content**: Some ePub files contain CSS and JavaScript that triggers these warnings
+**Mitigação implementada**:
+- DOM sanitizer remove scripts problemáticos
+- CSS blob URLs bloqueados, mas fallback styling garante legibilidade
+- Supressão de warnings escopo limitado ao iframe do epub
 
-### Impact on Functionality
+---
 
-✅ **No functional impact**: The plugin works correctly despite these warnings
-✅ **Reading experience**: All core features (reading, navigation, themes) work normally  
-✅ **Security maintained**: Obsidian's security is not compromised
+## Problemas Conhecidos
 
-### Technical Implementation
+### Limitações do iframe do epub.js
 
-- The plugin automatically sanitizes problematic scripts and external resources
-- CSS blob URLs are blocked but fallback styling ensures readability
-- Interactive ePub features may be limited, but basic reading is unaffected
-- The suppression is scoped to the ePub iframe only (does not override the global console)
-- The DOM sanitizer removes scripts and inlines stylesheets when possible, reducing CSP noise
-- Inline styles using `url(blob:...)` are stripped selectively to avoid violations without losing layout
+- Eventos `contextmenu` e `pointer` avançados não são propagados de forma previsível para o host Obsidian.
+- Tentativas de anexar menus nativos aos destaques resultaram em comportamento instável ou dependente de timeouts frágeis.
+- **Decisão**: O menu contextual foi removido. Toda a interação com destaques acontece pela seleção + toolbar (destacar, exportar, remover).
+- O fluxo atual prioriza previsibilidade: selecionar texto dentro de um destaque aciona os controles dedicados sem depender de eventos de clique dentro do iframe.
 
-## 🎯 Roadmap de Modularidade
+### Itens de backlog relacionados
 
-### Fase Atual (v1.6.1)
+- Extrair um hook `useHighlights` para reduzir o tamanho de `EpubReader.tsx`.
+- Normalizar logs de depuração adicionados durante a investigação dos destaques.
+- Investigar alternativas de UI baseadas em overlays próprios caso surja uma API confiável para eventos no iframe.
+
+### Entendendo os destaques (epub.js + marks-pane + Obsidian)
+
+Essa seção compila as descobertas mais importantes sobre o pipeline de destaques após as investigações de Outubro/2025:
+
+- **Quem desenha os destaques?** `rendition.annotations.highlight` delega para o `IframeView.highlight`, que cria um `Highlight` do pacote `marks-pane`. Esse helper rende um `<svg>` com `<g>` e múltiplos `rect/path/polygon` absolutizados.
+- **Onde o SVG vive?** O `Pane` do `marks-pane` é anexado ao container `.epub-view` (fora do `iframe` do capítulo). Portanto, o highlight não está dentro do `document` do livro, e sim no DOM host onde o ReactReader injeta os views.
+- **Propagação de eventos:** `marks-pane/src/events.ts` faz `proxyMouse` entre o `iframe` do livro e os overlays. Os eventos chegam como `click`/`pointerdown` normais, mas já no documento host. Para reagir, escute no `document` do overlay (não apenas no `iframe`).
+- **Coordenadas:** Como o `<g>` é absoluto em relação ao `.epub-view`, os bounding boxes vêm em coordenadas globais de viewport. Para posicionar um menu dentro do reader, converta usando `getBoundingClientRect()` do container principal (`readerContainerRef`).
+- **Grupo sem tamanho:** O `<g>` raiz frequentemente tem `width/height = 0`. Os retângulos reais estão nos filhos (`rect`, `polygon`, etc.). Use o primeiro `rect` válido como fallback de ancoragem.
+- **Metadados:** O `marks-pane` já copia `data-*` do objeto `data` passado ao `Highlight`. Aproveite para gravar `data-highlight-cfi`, `data-highlight-text`, etc., assim conseguimos reconstruir o contexto ao interceptar `pointerdown`.
+- **Guards de seleção:** Quando abrirmos dropdowns ou tooltips, registre listeners em **ambos** os documentos: o do `iframe` (texto) e o do overlay (`Pane`). Caso contrário, cliques fora não fecham o menu.
+- **Pointer-events:** As formas criadas pelo `marks-pane` têm `pointer-events: none`. Se quiser tornar o highlight clicável, habilite o `pointer-events` no `<g>` via `decorateHighlightElement`.
+
+Seguir esses pontos evita os bugs clássicos (menu aparecendo no canto 0x0, cliques ignorados, ou highlights “fantasmas”).
+
+---
+
+## Roadmap
+
+### v1.6.1 (Atual)
 ✅ Core puro implementado  
-✅ Spatial indexing para performance  
-✅ CFI-aware highlight system  
+✅ Spatial indexing (10-50x speedup)  
+✅ Sistema de highlights CFI-aware  
 ✅ Component-based UI architecture  
 
-### Próximas Fases
+### v1.7.0 - Hook Extraction
+- [ ] `useHighlights` extraído do EpubReader
+- [ ] `useSearch` para busca in-book
+- [ ] `useTheme` para gerenciamento de temas
+- [ ] **Meta**: EpubReader.tsx < 400 LOC
 
-**v1.7.0 - Hook Extraction**
-- [ ] Extrair `useHighlights` do EpubReader.tsx
-- [ ] Extrair `useSearch` para busca in-book
-- [ ] Extrair `useTheme` para gerenciamento de temas
-- [ ] Meta: EpubReader.tsx < 400 linhas
-
-**v1.8.0 - Advanced Performance**
+### v1.8.0 - Advanced Performance
 - [ ] Lazy loading de UI components
 - [ ] Virtual scrolling para TOC longos
 - [ ] Web Workers para processamento CFI
-- [ ] Bundle splitting para otimização
+- [ ] Bundle splitting
 
-**v1.9.0 - Enhanced Testing**
+### v1.9.0 - Enhanced Testing
 - [ ] 90%+ test coverage no core
 - [ ] Integration tests para adapters
 - [ ] Visual regression tests
@@ -257,122 +242,37 @@ Blocked script execution in 'about:srcdoc' because the document's frame is sandb
 
 ### Métricas de Modularidade
 
-**Tracking continuous improvement:**
-
 ```typescript
-// File size targets (lines of code)
-EpubReader.tsx:     944 → 300 (atual → meta)
-Core test coverage: 60% → 95% 
-Bundle size:        568KB → 450KB
-Cyclomatic complexity: Monitor via ESLint
+EpubReader.tsx:       944 → 300 LOC
+Core test coverage:   60% → 95%
+Bundle size:          568KB → 450KB
 ```
-
-## � Tentativas de Implementação - Context Menu com Botão Direito
-
-### Objetivo
-Fazer com que o menu de contexto dos highlights apareça **apenas** com clique direito (botão direito do mouse), não com clique esquerdo.
-
-### Tentativas Realizadas (Outubro 2025)
-
-#### ❌ Tentativa 1: Verificação de event.button no Callback
-**Abordagem:** Adicionar verificação `event.button === 2` dentro do callback do epub.js
-```typescript
-const clickCallback = (event: MouseEvent) => {
-  if (event.button !== 2) return; // Apenas botão direito
-  showHighlightContextMenu(event, {...});
-};
-```
-**Resultado:** Callbacks nunca foram chamados. Nenhum log de "Mark clicked" no console.
-
-#### ❌ Tentativa 2: Evento markClicked do epub.js
-**Abordagem:** Usar o evento nativo `markClicked` do rendition
-```typescript
-this.rendition.on('markClicked', (cfi: string, data: any, event: MouseEvent) => {
-  console.log('Mark clicked:', cfi, event.button);
-});
-```
-**Resultado:** Evento nunca foi disparado. Pesquisa no GitHub do epub.js confirmou limitações.
-
-#### ❌ Tentativa 3: Callback com Listener de contextmenu
-**Abordagem:** Usar callback do click para acessar o elemento DOM e adicionar listener de contextmenu
-```typescript
-const clickCallback = (event: MouseEvent) => {
-  const target = event.target as HTMLElement;
-  if (target.dataset.contextmenuAttached) return;
-  target.dataset.contextmenuAttached = 'true';
-  target.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    showHighlightContextMenu(e, {...});
-  });
-};
-```
-**Resultado:** Implementado em 3 locais (addClickableHighlight, restoreHighlights, restoreHighlightsOnLocationChange). Build bem-sucedido (568.5kb), mas menu não aparece no teste real.
-
-### Descobertas Técnicas
-
-1. **Limitação do epub.js:** A biblioteca apenas dispara callbacks para eventos 'click' e 'touchstart', NÃO para 'contextmenu'
-   - Fonte: Repositório GitHub futurepress/epub.js
-   - Callbacks recebem apenas MouseEvent de click
-
-2. **Timing de DOM:** Elementos de highlight são criados dinamicamente dentro do iframe do epub.js
-   - Acesso direto via querySelector pode falhar por questões de timing
-   - Callback fornece acesso confiável ao elemento
-
-3. **CFI Errors:** Console mostra erros "No startContainer found for epubcfi(...)"
-   - Esses erros são separados do problema do menu
-   - Não afetam a funcionalidade de clique
-
-### Estado Atual do Código
-
-**Arquivos Modificados:**
-- `src/EpubReader.tsx`: Callbacks implementados em 3 funções
-- `styles.css`: cursor alterado de 'pointer' para 'context-menu'
-- `src/ui/HighlightContextMenu.ts`: Já possui lógica completa de posicionamento
-
-**Comportamento Esperado (não confirmado):**
-1. Clique esquerdo no highlight → Anexa listener de contextmenu
-2. Clique direito no mesmo highlight → Deveria abrir o menu
-
-**Próximos Passos a Investigar:**
-- [ ] Verificar se iframe bloqueia eventos de contextmenu
-- [ ] Testar listeners diretamente no DOM após render completo
-- [ ] Investigar alternativas usando MutationObserver
-- [ ] Considerar usar biblioteca de context menu diferente
-- [ ] Verificar se Obsidian API tem limitações para menus em iframes
-
-### Referências
-- epub.js GitHub: https://github.com/futurepress/epub.js
-- Obsidian Plugin API: https://docs.obsidian.md/Plugins/
-- Annotations API do epub.js: rendition.annotations.add(type, cfi, data, callback, className, styles)
 
 ---
 
-## �🔄 Compatibilidade & Migration
+## Compatibilidade
 
 ### Backward Compatibility
 - **Settings migration**: Automática entre versões
 - **Data formats**: Sempre backward compatible
 - **API contracts**: Semantic versioning estrito
 
-### Testing Regression
-```bash
-# Testes essenciais antes de release
-1. Abertura de .epub ✓
-2. Mudança de tema ✓  
-3. Ajuste de fonte ✓
-4. Criação de nota ✓
-5. Sistema de highlights ✓
-6. Busca in-book ✓
-7. Performance com livros grandes ✓
-```
+### Testing Essencial Antes de Release
+
+1. ✓ Abertura de .epub
+2. ✓ Mudança de tema
+3. ✓ Ajuste de fonte
+4. ✓ Criação de nota
+5. ✓ Sistema de highlights
+6. ✓ Busca in-book
+7. ✓ Performance com livros grandes
 
 ---
 
-## 📚 Recursos Adicionais
+## Recursos Adicionais
 
 - **ARCHITECTURE.md**: Documentação detalhada da arquitetura
 - **CHANGELOG.md**: Histórico completo de mudanças
 - **TESTING_GUIDE.md**: Guia específico de testes
 - **Obsidian Plugin API**: https://docs.obsidian.md/Plugins/
-
-
+- **epub.js GitHub**: https://github.com/futurepress/epub.js

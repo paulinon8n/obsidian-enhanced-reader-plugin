@@ -7,13 +7,15 @@ import { useDarkMode } from "./hooks/useDarkMode";
 import { applyFontSize, applyTheme, applyFontFamily, type ThemeMode, type FontFamilyChoice } from "./adapters/epubjs/theme";
 import { createDefaultSanitizer } from "./core/sanitizer";
 import { registerContentHook, updateBionicMode, updateOpenDyslexicMode } from "./adapters/epubjs/contentHook";
+import { getHighlightElementAtGlobalPoint } from "./adapters/epubjs/highlightHover";
 import { createConsoleLogger } from "./core/logger";
 import { ReaderControls } from "./ui/ReaderControls";
+import { SelectionDropdown } from "./ui/SelectionDropdown";
 import type { HighlightEntry, ToolbarState } from "./EpubPluginSettings";
 import { HighlightIndex } from "./core/highlightIndex";
 import { CfiComparator } from "./core/cfiComparator";
 import { debounce } from "./utils/performance";
-import { showHighlightContextMenu, copyToClipboard } from "./ui/HighlightContextMenu";
+import { calculateDropdownPosition, type SelectionRect } from "./utils/selectionMenu";
 
 const DEFAULT_TOOLBAR_STATE: ToolbarState = {
   fontSize: 100,
@@ -23,6 +25,7 @@ const DEFAULT_TOOLBAR_STATE: ToolbarState = {
 };
 
 const SEARCH_RESULT_LIMIT = 100;
+const HIGHLIGHT_CLASS = "highlight-mark";
 
 const truncateExcerpt = (value: string): string => {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -30,7 +33,15 @@ const truncateExcerpt = (value: string): string => {
   return `${normalized.slice(0, 177)}…`;
 };
 
-type SelectionState = { cfi: string; text: string; chapter?: string; existingHighlightCfi?: string | null };
+type SelectionState = {
+  cfi: string;
+  text: string;
+  chapter?: string;
+  existingHighlightCfi?: string | null;
+  rects: SelectionRect[];
+  bounds: SelectionRect | null;
+  createdAt: number;
+};
 type SearchResult = { cfi: string; excerpt: string; chapter?: string };
 
 type BookNavigationItem = { href?: string; label?: string; text?: string };
@@ -49,6 +60,10 @@ type InternalBook = {
     toc?: BookNavigationItem[];
     get?: (href: string) => BookNavigationItem | undefined;
   };
+};
+
+type HighlightAwareDocument = Document & {
+  __enhancedHighlightPointerCleanup__?: () => void;
 };
 
 type EpubReaderProps = {
@@ -91,6 +106,7 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
 
   const [location, setLocation] = useState<string | number | undefined>(() => initialLocation);
   const [selection, setSelection] = useState<SelectionState | null>(null);
+  const [highlights, setHighlights] = useState<HighlightEntry[]>(() => initialHighlights ?? []);
 
   const [fontSize, setFontSize] = useState<number>(() => initialToolbarState?.fontSize ?? DEFAULT_TOOLBAR_STATE.fontSize);
   const [fontFamily, setFontFamily] = useState<FontFamilyChoice>(() => initialToolbarState?.fontFamily ?? DEFAULT_TOOLBAR_STATE.fontFamily);
@@ -99,6 +115,14 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
 
   const fontFamilyRef = useRef<FontFamilyChoice>(fontFamily);
   const bionicRef = useRef<boolean>(bionic);
+  const highlightIndexRef = useRef<HighlightIndex>(new HighlightIndex(initialHighlights ?? []));
+  const readerContainerRef = useRef<HTMLDivElement | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const selectionListenerCleanupRef = useRef<(() => void)[]>([]);
+
+  const [selectionMenuOpen, setSelectionMenuOpen] = useState(false);
+  const [selectionMenuPosition, setSelectionMenuPosition] = useState<{ left: number; top: number } | null>(null);
+  const [selectionMenuPlacement, setSelectionMenuPlacement] = useState<"above" | "below">("above");
 
   const isDarkMode = useDarkMode();
   const effectiveTheme: ThemeMode = userTheme ?? (isDarkMode ? "dark" : "light");
@@ -111,10 +135,232 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
   const [lastSearch, setLastSearch] = useState("");
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
 
-  // NEW: Create spatial index for highlights (performance optimization)
-  const highlightIndex = useMemo(
-    () => new HighlightIndex(initialHighlights || []),
-    [initialHighlights]
+  useEffect(() => {
+    setHighlights(initialHighlights ?? []);
+    highlightIndexRef.current.rebuild(initialHighlights ?? []);
+  }, [initialHighlights]);
+
+  useEffect(() => {
+    highlightIndexRef.current.rebuild(highlights);
+  }, [highlights]);
+
+  const registerHighlight = useCallback((entry: HighlightEntry) => {
+    setHighlights((prev) => {
+      const existingIndex = prev.findIndex((highlight) => highlight.cfi === entry.cfi);
+      if (existingIndex !== -1) {
+        const next = [...prev];
+        next[existingIndex] = entry;
+        return next;
+      }
+      return [entry, ...prev];
+    });
+    highlightIndexRef.current.add(entry);
+  }, []);
+
+  const unregisterHighlight = useCallback((cfiToRemove: string) => {
+    setHighlights((prev) => prev.filter((highlight) => highlight.cfi !== cfiToRemove));
+    highlightIndexRef.current.remove(cfiToRemove);
+  }, []);
+
+  const addSelectionListener = useCallback(
+    (target: EventTarget, type: string, handler: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
+      target.addEventListener(type, handler, options);
+      selectionListenerCleanupRef.current.push(() => {
+        target.removeEventListener(type, handler, options);
+      });
+    },
+    []
+  );
+
+  const clearSelectionListeners = useCallback(() => {
+    selectionListenerCleanupRef.current.forEach((cleanup) => {
+      try {
+        cleanup();
+      } catch {
+        /* ignore */
+      }
+    });
+    selectionListenerCleanupRef.current = [];
+  }, []);
+
+  const closeSelectionMenu = useCallback(() => {
+    setSelectionMenuOpen(false);
+    setSelectionMenuPosition(null);
+    setSelectionMenuPlacement("above");
+  }, []);
+
+  const openSelectionMenuAtRect = useCallback(
+    (rect: SelectionRect) => {
+      const containerEl = readerContainerRef.current;
+      if (!containerEl) return;
+
+      const containerRect = containerEl.getBoundingClientRect();
+      const { left, top, placement } = calculateDropdownPosition(rect, containerRect.width, containerRect.height);
+      setSelectionMenuPosition({ left, top });
+      setSelectionMenuPlacement(placement);
+      setSelectionMenuOpen(true);
+    },
+    []
+  );
+
+  useEffect(() => {
+    return () => {
+      clearSelectionListeners();
+    };
+  }, [clearSelectionListeners]);
+
+  useEffect(() => {
+    if (!selection) {
+      clearSelectionListeners();
+      closeSelectionMenu();
+    }
+  }, [selection, clearSelectionListeners, closeSelectionMenu]);
+
+  const setupSelectionGuards = useCallback(
+    (
+      selectionData: SelectionState,
+      context: {
+        document: Document | null;
+        window: Window | null;
+        iframeElement: HTMLIFrameElement | null;
+        overlayDocument?: Document | null;
+        overlayWindow?: Window | null;
+      }
+    ) => {
+      const containerEl = readerContainerRef.current;
+      if (!containerEl) return;
+
+      const iframeElement =
+        context.iframeElement ??
+        (context.document?.defaultView?.frameElement as HTMLIFrameElement | null) ??
+        (context.window?.frameElement as HTMLIFrameElement | null);
+      const iframeWindow = context.window ?? context.document?.defaultView ?? iframeElement?.contentWindow ?? null;
+      const targetDocument = context.document ?? iframeWindow?.document ?? null;
+      const overlayDocument = context.overlayDocument ?? undefined;
+      const overlayWindow = context.overlayWindow ?? overlayDocument?.defaultView ?? undefined;
+
+      if (!targetDocument) {
+        return;
+      }
+
+      const pointFromEvent = (event: MouseEvent) => {
+        const containerRect = containerEl.getBoundingClientRect();
+        const iframeRect = iframeElement?.getBoundingClientRect();
+        const currentTarget = event.currentTarget as EventTarget | null;
+        const isOverlayContext =
+          (!!overlayDocument && currentTarget === overlayDocument) ||
+          (!!overlayWindow && currentTarget === overlayWindow) ||
+          currentTarget === document ||
+          currentTarget === window;
+        const x = iframeRect && !isOverlayContext
+          ? event.clientX + iframeRect.left - containerRect.left
+          : event.clientX - containerRect.left;
+        const y = iframeRect && !isOverlayContext
+          ? event.clientY + iframeRect.top - containerRect.top
+          : event.clientY - containerRect.top;
+        return { x, y, containerRect };
+      };
+
+      const isPointWithinRect = (pointX: number, pointY: number, rect: SelectionRect) => {
+        return (
+          pointX >= rect.left &&
+          pointX <= rect.left + rect.width &&
+          pointY >= rect.top &&
+          pointY <= rect.top + rect.height
+        );
+      };
+
+      const handleIframeMouseDown = (event: MouseEvent) => {
+        if (event.button !== 0) return;
+
+        const now = Date.now();
+        if (now - selectionData.createdAt < 200) {
+          return;
+        }
+
+        const { x, y } = pointFromEvent(event);
+        const hitRect = selectionData.rects.find((rect) => isPointWithinRect(x, y, rect));
+        const fallbackRect =
+          !hitRect && selectionData.bounds && isPointWithinRect(x, y, selectionData.bounds)
+            ? selectionData.bounds
+            : null;
+        const targetRect = hitRect ?? fallbackRect;
+
+        if (targetRect) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (typeof event.stopImmediatePropagation === "function") {
+            event.stopImmediatePropagation();
+          }
+          openSelectionMenuAtRect(targetRect);
+        } else {
+          closeSelectionMenu();
+        }
+      };
+
+      const handleIframeSelectionChange = () => {
+        if (!iframeWindow || !iframeElement) return;
+        const activeSelection = iframeWindow.getSelection?.();
+        if (!activeSelection || activeSelection.isCollapsed) {
+          setSelection(null);
+          closeSelectionMenu();
+        }
+      };
+
+      const handleHostMouseDown = (event: MouseEvent) => {
+        if (dropdownRef.current && dropdownRef.current.contains(event.target as Node)) {
+          return;
+        }
+        closeSelectionMenu();
+      };
+
+      const handleEscape = (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          closeSelectionMenu();
+          event.stopPropagation();
+        }
+      };
+
+      const handleScroll = () => {
+        closeSelectionMenu();
+      };
+
+      addSelectionListener(targetDocument, "mousedown", handleIframeMouseDown, true);
+      if (iframeWindow && iframeElement) {
+        addSelectionListener(targetDocument, "selectionchange", handleIframeSelectionChange);
+      }
+      if (overlayDocument && overlayDocument !== targetDocument) {
+        addSelectionListener(overlayDocument, "mousedown", handleIframeMouseDown, true);
+      }
+      addSelectionListener(document, "mousedown", handleHostMouseDown, true);
+      addSelectionListener(document, "keydown", handleEscape, true);
+      if (targetDocument !== document) {
+        addSelectionListener(targetDocument, "keydown", handleEscape, true);
+      }
+      if (overlayDocument && overlayDocument !== targetDocument && overlayDocument !== document) {
+        addSelectionListener(overlayDocument, "keydown", handleEscape, true);
+      }
+      addSelectionListener(window, "keydown", handleEscape, true);
+      if (iframeWindow && iframeWindow !== window) {
+        addSelectionListener(iframeWindow, "keydown", handleEscape, true);
+      }
+      if (overlayWindow && overlayWindow !== window) {
+        addSelectionListener(overlayWindow, "keydown", handleEscape, true);
+      }
+      addSelectionListener(window, "resize", handleScroll);
+      addSelectionListener(window, "scroll", handleScroll, true);
+      addSelectionListener(targetDocument, "scroll", handleScroll, { passive: true });
+      if (overlayDocument && overlayDocument !== targetDocument) {
+        addSelectionListener(overlayDocument, "scroll", handleScroll, { passive: true });
+      }
+      if (iframeWindow) {
+        addSelectionListener(iframeWindow, "scroll", handleScroll, { passive: true });
+      }
+      if (overlayWindow && overlayWindow !== window) {
+        addSelectionListener(overlayWindow, "scroll", handleScroll, { passive: true });
+      }
+    },
+    [addSelectionListener, closeSelectionMenu, openSelectionMenuAtRect]
   );
 
   const sanitizer = useMemo(
@@ -406,110 +652,477 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
         renditionRef.current.annotations.remove(cfi, "highlight");
         logger.debug?.(`Removed highlight: ${cfi}`);
       }
-      onRemoveHighlight?.(cfi);
-      setSelection(null); // Clear selection after removing highlight
+      unregisterHighlight(cfi);
+      void onRemoveHighlight?.(cfi);
+      closeSelectionMenu();
+      setSelection(null);
     } catch (error) {
       logger.warn?.(`Failed to remove highlight: ${cfi}`, error);
     }
-  }, [onRemoveHighlight, logger]);
+  }, [onRemoveHighlight, logger, unregisterHighlight, closeSelectionMenu]);
 
-  // Helper: add a clickable highlight at a CFI with consistent styles and menu
-  const addClickableHighlight = useCallback((cfi: string, entry: { cfi: string; text: string; chapter?: string }) => {
+  const openHighlightContextMenu = useCallback(
+    (highlight: HighlightEntry, event: MouseEvent, sourceElement?: Element | null) => {
+      if ("button" in event && event.button !== 0) return;
+
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      const containerEl = readerContainerRef.current;
+      if (!containerEl) return;
+
+      const candidateElements: Element[] = [];
+      if (sourceElement instanceof Element) {
+        candidateElements.push(sourceElement);
+      }
+      if (event.currentTarget instanceof Element) {
+        candidateElements.push(event.currentTarget);
+      }
+      if (event.target instanceof Element) {
+        candidateElements.push(event.target as Element);
+      }
+
+      const resolvedHighlightElement =
+        candidateElements
+          .map((el) => (typeof el.closest === "function" ? el.closest("[data-highlight-cfi]") : null))
+          .find((el): el is Element => !!el) ?? null;
+
+      const containerRect = containerEl.getBoundingClientRect();
+
+      const highlightRect = (() => {
+        const rect = resolvedHighlightElement?.getBoundingClientRect() ?? null;
+        if (!rect) return null;
+        if (rect.width <= 0 || rect.height <= 0) {
+          return null;
+        }
+        return rect;
+      })();
+
+      const resolveRectFromChildren = (): SelectionRect[] => {
+        if (!resolvedHighlightElement) return [];
+        const shapeNodes = Array.from(
+          resolvedHighlightElement.querySelectorAll<SVGGraphicsElement>("rect, path, polygon, polyline")
+        );
+        if (shapeNodes.length === 0) return [];
+        return shapeNodes.map((shape) => {
+          const rect = shape.getBoundingClientRect();
+          return {
+            left: rect.left - containerRect.left,
+            top: rect.top - containerRect.top,
+            width: rect.width,
+            height: rect.height,
+          } as SelectionRect;
+        });
+      };
+
+      const rectsFromChildren = resolveRectFromChildren();
+
+      const fallbackRect: SelectionRect | null = rectsFromChildren.length > 0 ? rectsFromChildren[0] : null;
+
+      const anchorRect: SelectionRect = highlightRect
+        ? {
+            left: highlightRect.left - containerRect.left,
+            top: highlightRect.top - containerRect.top,
+            width: Math.max(highlightRect.width, 1),
+            height: Math.max(highlightRect.height, 1),
+          }
+        : fallbackRect ?? {
+            left: event.clientX - containerRect.left,
+            top: event.clientY - containerRect.top,
+            width: 1,
+            height: 1,
+          };
+
+      const selectionRects = rectsFromChildren.length > 0 ? rectsFromChildren : [anchorRect];
+
+      const viewRoot = resolvedHighlightElement?.closest?.(".epub-view") as HTMLElement | null;
+      const iframeElement = (viewRoot?.querySelector("iframe") as HTMLIFrameElement | null) ?? null;
+      const iframeWindow = iframeElement?.contentWindow ?? null;
+      const iframeDocument = iframeWindow?.document ?? null;
+
+      const overlayDocument = resolvedHighlightElement?.ownerDocument ?? null;
+      const overlayWindow = overlayDocument?.defaultView ?? null;
+
+      clearSelectionListeners();
+      closeSelectionMenu();
+
+      const selectionData: SelectionState = {
+        cfi: highlight.cfi,
+        text: highlight.text ?? "",
+        chapter: highlight.chapter,
+        existingHighlightCfi: highlight.cfi,
+        rects: selectionRects,
+        bounds: anchorRect,
+        createdAt: Date.now(),
+      };
+
+      setSelection(selectionData);
+      openSelectionMenuAtRect(anchorRect);
+      setupSelectionGuards(selectionData, {
+        document: iframeDocument ?? overlayDocument,
+        window: iframeWindow ?? (overlayWindow ?? null),
+        iframeElement,
+        overlayDocument,
+        overlayWindow,
+      });
+    },
+    [
+      clearSelectionListeners,
+      closeSelectionMenu,
+      openSelectionMenuAtRect,
+      setupSelectionGuards,
+    ]
+  );
+
+  const decorateHighlightElement = useCallback(
+    (annotation: unknown, highlight: HighlightEntry) => {
+      const element = (annotation as { element?: Element | null } | null)?.element;
+      if (!(element instanceof Element)) {
+        return;
+      }
+
+      if (!element.getAttribute("data-highlight-cfi")) {
+        element.setAttribute("data-highlight-cfi", highlight.cfi);
+      }
+
+      const currentText = highlight.text?.trim() ?? "";
+      if (currentText.length > 0) {
+        element.setAttribute("data-highlight-text", currentText);
+      } else {
+        element.removeAttribute("data-highlight-text");
+      }
+
+      if (highlight.chapter) {
+        element.setAttribute("data-highlight-chapter", highlight.chapter);
+      } else {
+        element.removeAttribute("data-highlight-chapter");
+      }
+
+      if (highlight.color) {
+        element.setAttribute("data-highlight-color", highlight.color);
+      } else {
+        element.removeAttribute("data-highlight-color");
+      }
+
+      if (highlight.createdAt) {
+        element.setAttribute("data-highlight-created-at", highlight.createdAt);
+      }
+
+      element.classList.add("enhanced-highlight-clickable");
+
+      if ("style" in element) {
+        const styledElement = element as Element & { style: CSSStyleDeclaration };
+        styledElement.style.cursor = "pointer";
+        styledElement.style.pointerEvents = "auto";
+      }
+
+      if (!element.getAttribute("data-enhanced-bind")) {
+        element.setAttribute("data-enhanced-bind", "true");
+        const handler = (event: Event) => {
+          if (event instanceof MouseEvent) {
+            openHighlightContextMenu(highlight, event, element);
+          }
+        };
+
+        element.addEventListener("mousedown", handler, true);
+        element.addEventListener("click", handler, true);
+      }
+    },
+    [openHighlightContextMenu]
+  );
+
+  const registerHighlightPointerHandler = useCallback(
+    (contents: Contents) => {
+      const doc = contents.document;
+      if (!doc) return;
+
+      const docWithState = doc as HighlightAwareDocument;
+      docWithState.__enhancedHighlightPointerCleanup__?.();
+
+      const frameElement = doc.defaultView?.frameElement as HTMLElement | null;
+      if (!frameElement) {
+        return;
+      }
+
+      const root = frameElement.parentElement;
+      if (!root) {
+        return;
+      }
+
+      const win = doc.defaultView ?? window;
+
+      const pointerHandler = (event: PointerEvent) => {
+        if (event.button !== 0) return;
+        if (event.defaultPrevented) return;
+        if (event.pointerType && event.pointerType !== "mouse" && event.pointerType !== "pen") {
+          return;
+        }
+
+        try {
+          const frameRect = frameElement.getBoundingClientRect();
+          const highlightElement = getHighlightElementAtGlobalPoint(
+            root,
+            event.clientX + frameRect.left,
+            event.clientY + frameRect.top
+          );
+
+          if (!highlightElement) {
+            return;
+          }
+
+          const cfi = highlightElement.getAttribute("data-highlight-cfi");
+          if (!cfi) {
+            return;
+          }
+
+          const highlightFromIndex = highlightIndexRef.current.findByCfi(cfi);
+
+          const highlightEntry: HighlightEntry = highlightFromIndex ?? {
+            cfi,
+            text: highlightElement.getAttribute("data-highlight-text") ?? "",
+            chapter: highlightElement.getAttribute("data-highlight-chapter") ?? undefined,
+            color: highlightElement.getAttribute("data-highlight-color") ?? undefined,
+            createdAt:
+              highlightElement.getAttribute("data-highlight-created-at") ?? new Date().toISOString(),
+          };
+
+          openHighlightContextMenu(highlightEntry, event as unknown as MouseEvent, highlightElement);
+        } catch (error) {
+          logger.debug?.("Highlight pointer detection failed", error);
+        }
+      };
+
+      doc.addEventListener("pointerdown", pointerHandler, true);
+
+      const cleanup = () => {
+        doc.removeEventListener("pointerdown", pointerHandler, true);
+        doc.removeEventListener("unload", cleanup);
+        win?.removeEventListener("pagehide", cleanup as EventListener);
+      };
+
+      doc.addEventListener("unload", cleanup);
+      win?.addEventListener("pagehide", cleanup as EventListener);
+
+      docWithState.__enhancedHighlightPointerCleanup__ = cleanup;
+    },
+    [logger, openHighlightContextMenu]
+  );
+
+  // Helper: render a highlight in the current rendition with consistent styles
+  const addHighlightToRendition = useCallback((highlight: HighlightEntry) => {
     const rendition = renditionRef.current;
     if (!rendition) return;
 
-    const highlight: HighlightEntry = {
-      cfi: entry.cfi,
-      text: entry.text,
-      chapter: entry.chapter,
-      createdAt: new Date().toISOString(),
-    };
-
-    // Callback is called on click events - use it to attach contextmenu listener
-    const clickCallback = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      
-      // Check if we already attached contextmenu listener
-      if (target.dataset.contextmenuAttached) return;
-      
-      // Mark as attached
-      target.dataset.contextmenuAttached = 'true';
-      
-      // Add contextmenu event listener
-      target.addEventListener('contextmenu', (e: MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        logger.debug?.('Contextmenu on highlight:', highlight.cfi);
-        
-        showHighlightContextMenu(e, {
-          highlight,
-          onEdit: undefined,
-          onRemove: (hCfi) => handleRemoveHighlight(hCfi),
-          onCopy: (text) => copyToClipboard(text),
-          onNavigate: (goCfi) => rendition.display(goCfi),
-        });
-      });
-      
-      logger.debug?.('Contextmenu listener attached to highlight:', cfi);
-    };
-
     try {
-      rendition.annotations.add(
-        "highlight",
-        cfi,
-        { highlightId: cfi, highlightData: highlight },
-        clickCallback, // Use callback to attach contextmenu listener
-        "highlight-clickable",
+      const highlightSvg = rendition.annotations.highlight(
+        highlight.cfi,
+        { highlightId: highlight.cfi, highlightData: highlight },
+        (event: Event) => {
+          if (event instanceof MouseEvent) {
+            const sourceEl = event.currentTarget instanceof Element ? event.currentTarget : null;
+            openHighlightContextMenu(highlight, event, sourceEl);
+          }
+        },
+        HIGHLIGHT_CLASS,
         {
-          fill: "yellow",
-          "fill-opacity": 0.2,
+          fill: highlight.color || "yellow",
+          "fill-opacity": 0.25,
         }
       );
-      
-      logger.debug?.(`Added highlight: ${cfi}`);
+
+      decorateHighlightElement(highlightSvg, highlight);
+
+      logger.debug?.(`✅ DEBUG: Highlight SVG criado com sucesso!`, highlightSvg);
+
+      setTimeout(() => {
+        try {
+          const contents = rendition.getContents?.();
+          const firstContent = Array.isArray(contents) ? contents[0] : contents;
+          const iframe = firstContent?.document?.defaultView?.frameElement as HTMLIFrameElement;
+          if (!iframe) {
+            logger.warn?.("❌ DEBUG: Iframe não encontrado");
+            return;
+          }
+
+          const doc = iframe.contentDocument;
+          if (!doc) {
+            logger.warn?.("❌ DEBUG: Documento do iframe não encontrado");
+            return;
+          }
+
+          const svgHighlights = Array.from(doc.querySelectorAll('svg[class*="highlight"]')).filter(svg =>
+            !svg.parentElement || svg.parentElement.tagName === 'HTML' || !doc.body.contains(svg)
+          );
+
+          logger.debug?.(`🔍 DEBUG: SVG highlights encontrados: ${svgHighlights.length}`);
+
+          if (svgHighlights.length > 0) {
+            const contentContainer = doc.body.querySelector('[id*="epubjs"], body > div, body') as HTMLElement;
+
+            if (contentContainer) {
+              svgHighlights.forEach((svg, index) => {
+                try {
+                  contentContainer.appendChild(svg);
+                  logger.debug?.(`✅ DEBUG: SVG ${index + 1} anexado ao DOM com sucesso`);
+                } catch (attachError) {
+                  logger.warn?.(`❌ DEBUG: Erro ao anexar SVG ${index + 1}:`, attachError);
+                }
+              });
+            } else {
+              logger.warn?.("❌ DEBUG: Container de conteúdo não encontrado");
+            }
+          }
+        } catch (domError) {
+          logger.warn?.("❌ DEBUG: Erro no acesso ao DOM:", domError);
+        }
+      }, 100);
+
+      logger.debug?.(`✅ DEBUG: Highlight adicionado: ${highlight.cfi}`);
     } catch (error) {
-      logger.warn?.("Failed to add clickable highlight", error);
+      logger.warn?.("❌ DEBUG: Falha ao adicionar highlight:", error);
     }
-  }, [handleRemoveHighlight, logger]);
+  }, [logger, decorateHighlightElement]);
 
   const handleHighlightClick = useCallback((cfiRange: string, contents: Contents) => {
-    const selectedText = contents.window?.getSelection?.()?.toString() ?? "";
+    const selectionObj = contents.window?.getSelection?.();
+    const selectedText = selectionObj?.toString() ?? "";
     const text = selectedText.trim();
-    
+
     logger.debug?.(`Selection event - text: "${text.substring(0, 50)}...", cfi: ${cfiRange}`);
-    
-    // NEW: Use CfiComparator for accurate overlap detection
-    const overlappingHighlights = CfiComparator.findOverlapping(
-      cfiRange,
-      initialHighlights || []
-    );
-    
+
+    const containerEl = readerContainerRef.current;
+    const iframeElement = contents.document?.defaultView?.frameElement as HTMLIFrameElement | null;
+
+    let rects: SelectionRect[] = [];
+    let bounds: SelectionRect | null = null;
+
+    if (selectionObj && selectionObj.rangeCount > 0 && containerEl && iframeElement) {
+      const range = selectionObj.getRangeAt(0).cloneRange();
+      const containerRect = containerEl.getBoundingClientRect();
+      const iframeRect = iframeElement.getBoundingClientRect();
+
+      rects = Array.from(range.getClientRects())
+        .filter((rect) => rect.width > 0 && rect.height > 0)
+        .map((rect) => ({
+          left: rect.left + iframeRect.left - containerRect.left,
+          top: rect.top + iframeRect.top - containerRect.top,
+          width: rect.width,
+          height: rect.height,
+        }));
+
+      if (rects.length > 0) {
+        const boundingRect = range.getBoundingClientRect();
+        bounds = {
+          left: boundingRect.left + iframeRect.left - containerRect.left,
+          top: boundingRect.top + iframeRect.top - containerRect.top,
+          width: boundingRect.width,
+          height: boundingRect.height,
+        };
+      }
+    }
+
+    clearSelectionListeners();
+    closeSelectionMenu();
+
+    const overlappingHighlights = CfiComparator.findOverlapping(cfiRange, highlights);
+    const createdAt = Date.now();
+
     if (overlappingHighlights.length > 0) {
-      // User selected text that overlaps with existing highlight(s)
-      const existingHighlight = overlappingHighlights[0]; // Use first match
+      const existingHighlight = overlappingHighlights[0];
       logger.debug?.(`Found existing highlight: ${existingHighlight.cfi}`);
-      
-      setSelection({
+
+      const nextSelection: SelectionState = {
         cfi: existingHighlight.cfi,
         text: existingHighlight.text || text,
         chapter: existingHighlight.chapter,
-        existingHighlightCfi: existingHighlight.cfi
+        existingHighlightCfi: existingHighlight.cfi,
+        rects,
+        bounds,
+        createdAt,
+      };
+      setSelection(nextSelection);
+      setupSelectionGuards(nextSelection, {
+        document: contents.document ?? null,
+        window:
+          (contents as unknown as { window?: Window | null }).window ?? contents.document?.defaultView ?? null,
+        iframeElement: (contents.document?.defaultView?.frameElement as HTMLIFrameElement | null) ?? null,
       });
-    } else if (text) {
-      // New selection, not on existing highlight
+      return;
+    }
+
+    if (text) {
       logger.debug?.("New selection, not on existing highlight");
       const section = (contents as unknown as { section?: { href?: string; canonical?: string } }).section;
       const chapter = resolveChapterFromHref(section?.href ?? section?.canonical);
-      
-      setSelection({ 
-        cfi: cfiRange, 
-        text, 
-        chapter, 
-        existingHighlightCfi: null 
+
+      const nextSelection: SelectionState = {
+        cfi: cfiRange,
+        text,
+        chapter,
+        existingHighlightCfi: null,
+        rects,
+        bounds,
+        createdAt,
+      };
+      setSelection(nextSelection);
+      setupSelectionGuards(nextSelection, {
+        document: contents.document ?? null,
+        window:
+          (contents as unknown as { window?: Window | null }).window ?? contents.document?.defaultView ?? null,
+        iframeElement: (contents.document?.defaultView?.frameElement as HTMLIFrameElement | null) ?? null,
       });
+    } else {
+      setSelection(null);
     }
-  }, [resolveChapterFromHref, logger, initialHighlights]);
+  }, [resolveChapterFromHref, logger, highlights, clearSelectionListeners, closeSelectionMenu, setupSelectionGuards]);
+
+
+  const handleSelectionHighlightAction = useCallback(() => {
+    if (!selection) return;
+    const newHighlight: HighlightEntry = {
+      cfi: selection.cfi,
+      text: selection.text,
+      chapter: selection.chapter,
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      addHighlightToRendition(newHighlight);
+    } catch (error) {
+      logger.warn?.("Failed to add highlight", error);
+    }
+    registerHighlight(newHighlight);
+    onSaveHighlight?.(newHighlight);
+    closeSelectionMenu();
+    setSelection(null);
+  }, [selection, addHighlightToRendition, logger, registerHighlight, onSaveHighlight, closeSelectionMenu]);
+
+  const handleSelectionExportAction = useCallback(() => {
+    if (!selection) return;
+    const newHighlight: HighlightEntry = {
+      cfi: selection.cfi,
+      text: selection.text,
+      chapter: selection.chapter,
+      createdAt: new Date().toISOString(),
+    };
+    onExportSelection?.(newHighlight);
+    try {
+      addHighlightToRendition(newHighlight);
+    } catch (error) {
+      logger.warn?.("Failed to add export highlight", error);
+    }
+    registerHighlight(newHighlight);
+    closeSelectionMenu();
+    setSelection(null);
+  }, [selection, onExportSelection, addHighlightToRendition, logger, registerHighlight, closeSelectionMenu]);
+
+  const handleSelectionCancelAction = useCallback(() => {
+    closeSelectionMenu();
+    setSelection(null);
+  }, [closeSelectionMenu]);
 
 
 
@@ -578,7 +1191,10 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
   );
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
+    <div
+      ref={readerContainerRef}
+      style={{ height: "100vh", display: "flex", flexDirection: "column", position: "relative" }}
+    >
       <ReaderControls
         fontSize={fontSize}
         onFontSizeChange={setFontSize}
@@ -605,37 +1221,9 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
             logger.warn?.("Failed to update bionic mode on current views", error);
           }
         }}
-        onSelectionHighlight={() => {
-          if (!selection) return;
-          try {
-            addClickableHighlight(selection.cfi, { cfi: selection.cfi, text: selection.text, chapter: selection.chapter });
-          } catch (error) {
-            logger.warn?.("Failed to add highlight", error);
-          }
-          onSaveHighlight?.({
-            cfi: selection.cfi,
-            text: selection.text,
-            chapter: selection.chapter,
-            createdAt: new Date().toISOString(),
-          });
-          setSelection(null);
-        }}
-        onSelectionExport={() => {
-          if (!selection) return;
-          onExportSelection?.({
-            cfi: selection.cfi,
-            text: selection.text,
-            chapter: selection.chapter,
-            createdAt: new Date().toISOString(),
-          });
-          try {
-            addClickableHighlight(selection.cfi, { cfi: selection.cfi, text: selection.text, chapter: selection.chapter });
-          } catch (error) {
-            logger.warn?.("Failed to add export highlight", error);
-          }
-          setSelection(null);
-        }}
-        onSelectionCancel={() => setSelection(null)}
+        onSelectionHighlight={handleSelectionHighlightAction}
+        onSelectionExport={handleSelectionExportAction}
+        onSelectionCancel={handleSelectionCancelAction}
         selectionActive={!!selection}
         selectionText={selection?.text}
         selectionChapter={selection?.chapter}
@@ -654,6 +1242,23 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
         onSearchNext={handleSearchNext}
         onSearchPrev={handleSearchPrev}
       />
+
+      {selection && selectionMenuOpen && selectionMenuPosition && (
+        <SelectionDropdown
+          ref={dropdownRef}
+          position={selectionMenuPosition}
+          placement={selectionMenuPlacement}
+          hasExistingHighlight={!!selection.existingHighlightCfi}
+          onHighlight={handleSelectionHighlightAction}
+          onRemoveHighlight={
+            selection.existingHighlightCfi
+              ? () => handleRemoveHighlight(selection.existingHighlightCfi as string)
+              : undefined
+          }
+          onExport={handleSelectionExportAction}
+          onCancel={handleSelectionCancelAction}
+        />
+      )}
 
       {searchOpen && (
         <div
@@ -728,12 +1333,13 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
           url={contents}
           getRendition={(rendition: Rendition) => {
             renditionRef.current = rendition;
-            rendition.hooks.content.register((c: Contents) =>
+            rendition.hooks.content.register((c: Contents) => {
               registerContentHook(c, sanitizer, logger, {
                 bionicEnabled: bionicRef.current,
                 fontFamily: fontFamilyRef.current,
-              })
-            );
+              });
+              registerHighlightPointerHandler(c);
+            });
 
             // Restore highlights after content is ready
             if (initialHighlights && Array.isArray(initialHighlights)) {
@@ -756,107 +1362,156 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
                   }
                 });
 
-                // Add highlights with callback to attach contextmenu listeners
-                for (const highlight of initialHighlights) {
+                const storedHighlights = highlightIndexRef.current.getAll();
+
+                // Add highlights using BREAKTHROUGH approach
+                for (const highlight of storedHighlights) {
                   // Basic CFI validation
                   if (!highlight.cfi || typeof highlight.cfi !== 'string' || !highlight.cfi.startsWith('epubcfi(')) {
-                    logger.warn?.(`Invalid CFI format: ${highlight.cfi}`);
+                    logger.warn?.(`❌ DEBUG: CFI inválido: ${highlight.cfi}`);
                     continue;
                   }
 
-                  // Callback to attach contextmenu listener on first click
-                  const clickCallback = (event: MouseEvent) => {
-                    const target = event.target as HTMLElement;
-                    
-                    if (target.dataset.contextmenuAttached) return;
-                    target.dataset.contextmenuAttached = 'true';
-                    
-                    target.addEventListener('contextmenu', (e: MouseEvent) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      
-                      logger.debug?.('Contextmenu on highlight:', highlight.cfi);
-                      
-                      showHighlightContextMenu(e, {
-                        highlight,
-                        onEdit: undefined,
-                        onRemove: (cfi) => handleRemoveHighlight(cfi),
-                        onCopy: (text) => copyToClipboard(text),
-                        onNavigate: (cfi) => rendition.display(cfi),
-                      });
-                    });
-                    
-                    logger.debug?.('Contextmenu listener attached:', highlight.cfi);
-                  };
-
                   try {
-                    await rendition.annotations.add(
-                      "highlight", 
-                      highlight.cfi, 
+                    // BREAKTHROUGH: Use annotations.highlight() for restoration
+                    const highlightSvg = rendition.annotations.highlight(
+                      highlight.cfi,
                       { highlightId: highlight.cfi, highlightData: highlight },
-                      clickCallback,
-                      "highlight-clickable",
+                      (event: Event) => {
+                        if (event instanceof MouseEvent) {
+                          const sourceEl = event.currentTarget instanceof Element ? event.currentTarget : null;
+                          openHighlightContextMenu(highlight, event, sourceEl);
+                        }
+                      },
+                      HIGHLIGHT_CLASS,
                       {
                         fill: highlight.color || "yellow",
-                        "fill-opacity": 0.2,
+                        "fill-opacity": 0.25,
                       }
                     );
+
+                    decorateHighlightElement(highlightSvg, highlight);
                     
-                    logger.debug?.(`Successfully restored highlight: ${highlight.cfi}`);
+                    logger.debug?.(`✅ DEBUG: Highlight restaurado: ${highlight.cfi}`, highlightSvg);
                   } catch (error) {
-                    logger.warn?.(`Failed to restore highlight for CFI: ${highlight.cfi}`, error);
+                    logger.warn?.(`❌ DEBUG: Falha ao restaurar highlight: ${highlight.cfi}`, error);
                   }
                 }
+
+                // AUTOMATIC SVG ATTACHMENT for restored highlights
+                setTimeout(() => {
+                  try {
+                    const contents = rendition.getContents?.();
+                    const firstContent = Array.isArray(contents) ? contents[0] : contents;
+                    const iframe = firstContent?.document?.defaultView?.frameElement as HTMLIFrameElement;
+                    if (!iframe) {
+                      logger.warn?.("❌ DEBUG: Iframe não encontrado durante restauração");
+                      return;
+                    }
+
+                    const doc = iframe.contentDocument;
+                    if (!doc) {
+                      logger.warn?.("❌ DEBUG: Documento do iframe não encontrado durante restauração");
+                      return;
+                    }
+
+                    // Find all unattached SVG highlights
+                    const svgHighlights = Array.from(doc.querySelectorAll('svg[class*="highlight"]')).filter(svg => 
+                      !svg.parentElement || svg.parentElement.tagName === 'HTML' || !doc.body.contains(svg)
+                    );
+
+                    logger.debug?.(`🔍 DEBUG: SVG highlights encontrados para restauração: ${svgHighlights.length}`);
+                    
+                    if (svgHighlights.length > 0) {
+                      // Get the main content container
+                      const contentContainer = doc.body.querySelector('[id*="epubjs"], body > div, body') as HTMLElement;
+                      
+                      if (contentContainer) {
+                        svgHighlights.forEach((svg, index) => {
+                          try {
+                            contentContainer.appendChild(svg);
+                            logger.debug?.(`✅ DEBUG: SVG restaurado ${index + 1} anexado ao DOM`);
+                          } catch (attachError) {
+                            logger.warn?.(`❌ DEBUG: Erro ao anexar SVG restaurado ${index + 1}:`, attachError);
+                          }
+                        });
+                      } else {
+                        logger.warn?.("❌ DEBUG: Container de conteúdo não encontrado durante restauração");
+                      }
+                    }
+                  } catch (domError) {
+                    logger.warn?.("❌ DEBUG: Erro no acesso ao DOM durante restauração:", domError);
+                  }
+                }, 300); // Delay to ensure SVGs are created
               };
 
               // NEW: Optimized restoration using spatial index + debounce
               // Only restores highlights for current section (performance optimization)
               const restoreHighlightsOnLocationChange = debounce((location: string) => {
                 // Get highlights for current section only
-                const sectionHighlights = highlightIndex.getForSection(location);
-                logger.debug?.(`Restoring ${sectionHighlights.length} highlights for current section`);
+                const sectionHighlights = highlightIndexRef.current.getForSection(location);
+                logger.debug?.(`🔄 DEBUG: Restaurando ${sectionHighlights.length} highlights para a seção atual`);
                 
-                sectionHighlights.forEach(highlight => {
+                sectionHighlights.forEach((highlight: HighlightEntry) => {
                   if (!highlight.cfi || typeof highlight.cfi !== 'string' || !highlight.cfi.startsWith('epubcfi(')) {
                     return;
                   }
                   
-                  const clickCallback = (event: MouseEvent) => {
-                    const target = event.target as HTMLElement;
-                    
-                    if (target.dataset.contextmenuAttached) return;
-                    target.dataset.contextmenuAttached = 'true';
-                    
-                    target.addEventListener('contextmenu', (e: MouseEvent) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      
-                      showHighlightContextMenu(e, {
-                        highlight,
-                        onEdit: undefined,
-                        onRemove: (cfi) => handleRemoveHighlight(cfi),
-                        onCopy: (text) => copyToClipboard(text),
-                        onNavigate: (cfi) => rendition.display(cfi),
-                      });
-                    });
-                  };
-                  
                   try {
-                    rendition.annotations.add(
-                      "highlight", 
-                      highlight.cfi, 
+                    // BREAKTHROUGH: Use annotations.highlight() for location-based restoration too
+                    rendition.annotations.highlight(
+                      highlight.cfi,
                       { highlightId: highlight.cfi, highlightData: highlight },
-                      clickCallback,
-                      "highlight-clickable",
+                      undefined,
+                      HIGHLIGHT_CLASS,
                       {
                         fill: highlight.color || "yellow",
-                        "fill-opacity": 0.2,
+                        "fill-opacity": 0.25,
                       }
                     );
+                    
+                    logger.debug?.(`✅ DEBUG: Highlight da seção restaurado: ${highlight.cfi}`);
                   } catch (error) {
                     // Silently fail for location changes - this is expected for highlights not in current view
+                    logger.debug?.(`⚠️ DEBUG: Highlight não disponível na vista atual: ${highlight.cfi}`);
                   }
                 });
+
+                // AUTOMATIC SVG ATTACHMENT for location-based highlights
+                setTimeout(() => {
+                  try {
+                    const contents = rendition.getContents?.();
+                    const firstContent = Array.isArray(contents) ? contents[0] : contents;
+                    const iframe = firstContent?.document?.defaultView?.frameElement as HTMLIFrameElement;
+                    
+                    if (!iframe) return;
+
+                    const doc = iframe.contentDocument;
+                    if (!doc) return;
+
+                    // Find unattached SVG highlights
+                    const svgHighlights = Array.from(doc.querySelectorAll('svg[class*="highlight"]')).filter(svg => 
+                      !svg.parentElement || svg.parentElement.tagName === 'HTML' || !doc.body.contains(svg)
+                    );
+
+                    if (svgHighlights.length > 0) {
+                      const contentContainer = doc.body.querySelector('[id*="epubjs"], body > div, body') as HTMLElement;
+
+                      if (contentContainer) {
+                        svgHighlights.forEach((svg, index) => {
+                          try {
+                            contentContainer.appendChild(svg);
+                            logger.debug?.(`✅ DEBUG: SVG da seção ${index + 1} anexado ao DOM`);
+                          } catch (attachError) {
+                            logger.debug?.(`⚠️ DEBUG: Erro ao anexar SVG da seção:`, attachError);
+                          }
+                        });
+                      }
+                    }
+                  } catch (domError) {
+                    logger.debug?.("⚠️ DEBUG: Erro no DOM durante mudança de seção:", domError);
+                  }
+                }, 100); // Quick attachment for location changes
               }, 300); // Debounce by 300ms
 
               rendition.on("locationChanged", (location: { start?: { cfi?: string; toString?: () => string } }) => {

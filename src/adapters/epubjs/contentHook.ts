@@ -3,6 +3,7 @@ import type { ISanitizer } from '../../core/sanitizer';
 import type { ILogger } from '../../core/logger';
 import OpenDyslexicCss from '../../assets/OpenDyslexicCss';
 import type { FontFamilyChoice } from './theme';
+import { installHighlightHover } from './highlightHover';
 
 export interface ContentHookOptions {
   bionicEnabled?: boolean;
@@ -72,6 +73,13 @@ export function registerContentHook(contents: Contents, sanitizer: ISanitizer, l
     doc.body.classList.toggle('od-enabled', !!odEnabled);
   } catch (e) {
     logger?.warn?.('Bionic setup error', e);
+  }
+
+  // Enhance highlight affordances inside the iframe content
+  try {
+    installHighlightHover(doc);
+  } catch (e) {
+    logger?.warn?.('Failed to install highlight hover helpers', e);
   }
 }
 

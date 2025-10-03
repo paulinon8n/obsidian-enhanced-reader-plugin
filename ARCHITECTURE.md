@@ -19,7 +19,8 @@ Este plugin deve ser modularizado para reduzir risco de bugs, facilitar testes e
 ### Adapters
 
 - **`epubjs/`**
-  - **`contentHook.ts`**: Registra hook de conteúdo do epub.js, aplica supressão de CSP no iframe e chama o `sanitizer` do core
+  - **`contentHook.ts`**: Registra hook de conteúdo do epub.js, aplica supressão de CSP no iframe, injeta fontes/estilos e delega ao `sanitizer` do core
+  - **`highlightHover.ts`**: Observa os SVGs gerados pelo `marks-pane` (fora do iframe) e injeta sublinhado dinâmico quando o mouse paira sobre um destaque
   - **`theme.ts`**: Aplica tema claro/escuro e tamanho de fonte no `Rendition` do epub.js
 - **`storage/`**
   - **`localStorageAdapter.ts`**: Implementação do contrato `IStorage` usando LocalStorage
@@ -31,9 +32,9 @@ Este plugin deve ser modularizado para reduzir risco de bugs, facilitar testes e
 ### UI Components
 
 - **`ErrorBoundary.tsx`**: Proteção contra erros em tempo de execução na UI do leitor
-- **`ReaderControls.tsx`**: Controles de toolbar (tema, fonte, busca, etc.)
-- **`HighlightContextMenu.ts`**: Menu contextual para interação com highlights
-  - Menu nativo do Obsidian com opções de visualizar, editar, copiar ou remover highlights
+- **`ReaderControls.tsx`**: Controles de toolbar (tema, fonte, busca e destaques)
+  - Centraliza ações de destacar, exportar e remover seleções
+- **`HighlightContextMenu.ts`** *(legado)*: Mantido apenas como referência histórica; interações de destaque acontecem na toolbar
 
 ### Assets
 
@@ -53,14 +54,17 @@ Este plugin deve ser modularizado para reduzir risco de bugs, facilitar testes e
 ## Principais Componentes
 
 ### `EpubPlugin.ts`
+
 Plugin principal que registra o visualizador de EPUBs no Obsidian.
 
 ### `EpubView.tsx`
+
 - Gerencia o ciclo de vida da visualização de arquivos EPUB
 - Envolve o leitor com `ErrorBoundary` para falhas não previstas
 - Integra com sistema de notas do Obsidian
 
 ### `EpubReader.tsx`
+
 - Componente principal que orquestra todas as peças:
   - Usa `useDarkMode` para detectar tema
   - Cria `sanitizer` e outros componentes do core
@@ -70,11 +74,12 @@ Plugin principal que registra o visualizador de EPUBs no Obsidian.
   - Implementa busca in-book e navegação
 
 ### `EpubPluginSettings.ts`
+
 Tipos e configurações do plugin.
 
 ## Fluxo de Dados
 
-```
+```text
 EpubPlugin.ts (registro)
     ↓
 EpubView.tsx (lifecycle + ErrorBoundary)
@@ -83,7 +88,7 @@ EpubReader.tsx (orquestração)
     ↓
 ┌─ Core (cfiComparator, highlightIndex, sanitizer)
 ├─ Adapters (epubjs hooks, theme application)
-├─ UI (controls, context menus)
+├─ UI (toolbar e feedback contextual)
 └─ Utils (performance optimizations)
 ```
 
@@ -98,16 +103,19 @@ EpubReader.tsx (orquestração)
 ## Principais Melhorias Arquiteturais
 
 ### 1. Sistema de Highlights Avançado
+
 - **CFI Comparison**: Substituiu matching de strings por análise semântica de CFIs
 - **Spatial Indexing**: Otimização de O(n) para O(1) em busca de highlights
-- **Context Menu**: Interface nativa para interação com highlights
+- **Toolbar Context-Aware**: Interação guiada diretamente na barra de ferramentas com opções de destacar, exportar e remover
 
 ### 2. Performance
+
 - **Debouncing**: Evita operações custosas em eventos frequentes
 - **Spatial Indexing**: Reduz drasticamente tempo de busca em livros grandes
 - **Lazy Loading**: Highlights carregados apenas quando necessário
 
 ### 3. Modularidade
+
 - **Adapters Pattern**: Abstrai integrações com bibliotecas externas
 - **Pure Core**: Lógica de negócio sem dependências, facilita testes
 - **UI Components**: Componentes reutilizáveis e composáveis
@@ -115,6 +123,7 @@ EpubReader.tsx (orquestração)
 ## Compatibilidade
 
 A refatoração preserva o comportamento anterior. Diferenças visuais provavelmente vêm de:
+
 - Correções de sanitização que evitam alertas de CSP
 - Melhorias na detecção e performance de highlights
 - Interface mais responsiva devido às otimizações de performance

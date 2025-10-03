@@ -1,5 +1,7 @@
 # Changelog
 
+<!-- markdownlint-disable MD024 -->
+
 All notable changes to the Enhanced Reader Plugin will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -7,13 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nenhuma mudança ainda._
+
+## [1.6.3] - 2025-10-03
+
+### Fixed
+
+- Dropdown de seleção posiciona-se corretamente mesmo quando o destaque é fornecido pelo overlay SVG do `marks-pane`, evitando que apareça escondido no canto superior esquerdo
+
 ### Changed
 
-- **Highlight Context Menu**: Now opens only on right-click (contextmenu) instead of left-click
-  - More intuitive - follows standard OS convention for context menus
-  - Integrates better with native browser/epub.js text selection menu
-  - Cursor changed from `pointer` to `context-menu` for visual clarity
-  - Left-click on highlights no longer triggers menu (allows normal reading flow)
+- Clicar em um destaque existente agora abre o menu suspenso com as mesmas ações de seleção, sem necessidade de refazer o texto selecionado
+
+### Documentation
+
+- `README.md` atualizado com as novas instruções de gerenciamento de destaques
+
+## [1.6.2] - 2025-10-02
+
+### Added
+
+- Realce visual ao passar o mouse sobre destaques: linha de sublinhado dinâmica e configurável, compatível com a renderização `marks-pane` do epub.js
+- Testes unitários (`test/highlightHover.test.ts`) cobrindo configuração e estado de hover dos destaques
+
+### Changed
+
+- O índice de destaques (`HighlightIndex`) é atualizado em tempo real sempre que destaques são criados ou removidos
+- Estilos CSS simplificados para remover dicas visuais obsoletas do menu contextual
+
+### Removed
+
+- Menu contextual de destaques e handlers associados (toda a gestão de destaques migrou para a toolbar dedicada)
+
+### Technical
+
+- Novo helper `highlightHover.ts` conecta os overlays SVG gerados pelo epub.js (via `marks-pane`) ao sistema de hover do plugin, observando mutações do container fora do iframe do livro
+- `contentHook.ts` instala automaticamente o helper de hover dentro de cada iframe renderizado pelo epub.js
+- Documentação atualizada (`ARCHITECTURE.md`, `DEVELOPING.md`) para refletir a arquitetura de hover baseada em adapters
 
 ## [1.6.1] - 2025-10-01
 

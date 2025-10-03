@@ -8,7 +8,7 @@ This is an enhanced ePub reader plugin for Obsidian (https://obsidian.md). Can o
 
 - 📚 **Full EPUB Support**: Read `.epub` files directly in Obsidian
 - 🔍 **In-Book Search**: Search within the entire book with result navigation and excerpts
-- ✏️ **Highlight Management**: Create, view, and remove highlights with context-aware interface
+- ✏️ **Highlight Management**: Create, export, and remove highlights via the context-aware toolbar
 - 🎨 **Theme Control**: Light, Dark, or Sepia themes (auto-follows Obsidian theme)
 - 🔤 **Font Customization**: Adjustable size (80-160%) and family (System/Sans/Serif/OpenDyslexic)
 - 🧠 **Bionic Reading**: Experimental mode to assist with dyslexia/ADHD
@@ -52,16 +52,18 @@ This is an enhanced ePub reader plugin for Obsidian (https://obsidian.md). Can o
 
 **Creating Highlights:**
 1. Select any text in the EPUB
-2. Click the "Destacar" (Highlight) button in the toolbar
+2. Use the floating dropdown (or the toolbar) and click "Destacar"
 3. The text is highlighted in yellow and saved automatically
 
-**Removing Highlights:**
-1. Select text within an existing highlight (drag to select)
-2. Notice the green badge: "Destaque existente detectado" (Existing highlight detected)
-3. Click the red "Remover destaque" (Remove highlight) button
-4. The highlight is permanently removed
+**Managing Existing Highlights:**
+
+- **Quick actions**: A floating dropdown aparece tanto quando você seleciona um trecho quanto quando clica diretamente sobre um destaque já existente — não é mais necessário refazer a seleção.
+- **Remover destaque**: Clique no destaque e escolha "Remover destaque" para apagá-lo.
+- **Exportar para nota**: Qualquer destaque (novo ou existente) pode ser enviado para a nota do livro com um clique.
+- **Cancelar**: Feche o menu rapidamente com o botão "Cancelar".
 
 **Features:**
+
 - ✅ Highlights persist across reading sessions
 - ✅ Automatic detection of existing highlights when selecting text
 - ✅ Visual feedback (green badge) when highlighting existing text
@@ -71,12 +73,14 @@ This is an enhanced ePub reader plugin for Obsidian (https://obsidian.md). Can o
 ### Search Functionality
 
 **How to Search:**
+
 1. Click the search icon (magnifying glass) in the toolbar
 2. Enter your search query
 3. Navigate through results with Previous/Next buttons
 4. Click "Clear" to remove search highlights
 
 **Features:**
+
 - ✅ Full-text search across the entire book
 - ✅ Result count and current position indicator
 - ✅ Excerpts showing context around matches
@@ -100,7 +104,7 @@ This is an enhanced ePub reader plugin for Obsidian (https://obsidian.md). Can o
   - Font family and Bionic mode
   - Latest toolbar adjustments become the default for newly opened books (you can still override per title)
   - Highlights: your manual highlights are persisted per book and restored on reopen. You can also export a selection to the companion note with an automatic citation and a deep link back to the exact location in the book.
-  - **Highlight management**: Click on any existing highlight to remove it. A toolbar will appear with removal options.
+  - **Highlight management**: Reselect text that already has a highlight to reveal the toolbar with removal options.
 
 ### Architecture notes
 
