@@ -2,6 +2,14 @@
 
 <!-- markdownlint-disable MD022 MD031 MD032 MD034 MD040 -->
 
+## Stack Tecnológico
+
+- **React 18.3.1**: UI framework com Concurrent Features
+- **TypeScript 5.9.3**: Type safety e melhor DX
+- **epub.js 0.3.93**: Core de renderização EPUB
+- **ESBuild 0.25**: Bundler ultrarrápido
+- **Vitest 3.2.4**: Test runner moderno
+
 ## Filosofia Arquitetural
 
 Este plugin adota **Ports & Adapters (Hexagonal Architecture)** como fundação permanente, não como objetivo inicial. Compromissos inegociáveis:
@@ -94,9 +102,11 @@ npm run version       # Bump de versão (manifest.json + versions.json)
 
 2. **TypeScript Check**: Validação de tipos sem emissão
 
-3. **ESBuild**: Bundle otimizado (~568KB)
+3. **ESBuild**: Bundle otimizado (~701KB com React 18)
 
 **Saída final**: `main.js`, `manifest.json`, `styles.css`
+
+**Nota sobre Bundle Size**: A migração para React 18 (de Preact compat) aumentou o bundle em ~40KB, mas trouxe melhor estabilidade, compatibilidade com ecossistema e acesso a features modernas do React 18.
 
 ---
 

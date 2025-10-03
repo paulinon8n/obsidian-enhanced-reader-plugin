@@ -56,7 +56,8 @@ export function createDefaultSanitizer(options?: SanitizerOptions): ISanitizer {
             }
             props.forEach((prop) => {
               const val = styleDecl.getPropertyValue(prop);
-              if (val && val.includes('url(blob:')) {
+              // Check for blob: URLs in various formats: url(blob:...) or url("blob:...") or url('blob:...')
+              if (val && /url\s*\(\s*["']?blob:/i.test(val)) {
                 styleDecl.removeProperty(prop);
               }
             });

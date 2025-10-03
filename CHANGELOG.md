@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nenhuma mudança ainda._
 
+## [1.7.0] - 2025-10-03
+
+### Changed
+
+- **Migração para React 18**: Substituído Preact compat por React 18.3.1 oficial
+  - Migrado de `ReactDOM.render()` (deprecated) para `createRoot()` API moderna
+  - Melhor compatibilidade com ecossistema React
+  - Suporte a Concurrent Features e futuras otimizações do React 18
+  - Bundle size aumentou ~40KB (de 660KB para 701KB) para melhor estabilidade
+
+### Technical
+
+- `EpubView.tsx` agora usa `react-dom/client` com gerenciamento adequado do root
+- Lazy initialization do React root para otimizar performance
+- Remoção completa de dependências Preact
+- TypeScript types e runtime agora 100% sincronizados (sem warnings)
+
+### Dependencies
+
+- Updated: `react` from `@preact/compat@17.0.3` to `18.3.1`
+- Updated: `react-dom` from `@preact/compat@17.0.3` to `18.3.1`
+
 ## [1.6.3] - 2025-10-03
 
 ### Fixed

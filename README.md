@@ -1,10 +1,12 @@
 ![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/paulinon8n/obsidian-enhanced-reader-plugin) ![GitHub all releases](https://img.shields.io/github/downloads/paulinon8n/obsidian-enhanced-reader-plugin/total) ![GitHub Release Date](https://img.shields.io/github/release-date/paulinon8n/obsidian-enhanced-reader-plugin) ![GitHub last commit](https://img.shields.io/github/last-commit/paulinon8n/obsidian-enhanced-reader-plugin)
 
-## Obsidian Enhanced Reader Plugin
+# Obsidian Enhanced Reader Plugin
 
-This is an enhanced ePub reader plugin for Obsidian (https://obsidian.md). Can open document with `.epub` file extension.
+This is an enhanced ePub reader plugin for Obsidian (<https://obsidian.md>). Can open document with `.epub` file extension.
 
-### ✨ Key Features
+> ⚡ **v1.7.0**: Now powered by React 18 for better performance and modern features!
+
+## ✨ Key Features
 
 - 📚 **Full EPUB Support**: Read `.epub` files directly in Obsidian
 - 🔍 **In-Book Search**: Search within the entire book with result navigation and excerpts

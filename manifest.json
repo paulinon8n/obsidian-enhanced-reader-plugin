@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-enhanced-reader-plugin",
 	"name": "Enhanced Reader",
-	"version": "1.6.3",
+	"version": "1.7.0",
 	"minAppVersion": "0.12.0",
 	"description": "This is an enhanced ePub reader plugin for Obsidian. Can open document with \".epub\" file extension.",
 	"author": "Dr. Paulo Bernardy",

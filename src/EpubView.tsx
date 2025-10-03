@@ -1,6 +1,6 @@
 import { WorkspaceLeaf, FileView, TFile, Menu, moment, Notice } from "obsidian";
 import * as React from 'react';
-import * as ReactDOM from 'react-dom';
+import { createRoot, type Root } from 'react-dom/client';
 import { EpubPluginSettings, HighlightEntry, ToolbarState } from "./EpubPluginSettings";
 import { EpubReader } from "./EpubReader";
 import { ErrorBoundary } from './ui/ErrorBoundary';
@@ -21,6 +21,8 @@ export class EpubView extends FileView {
   allowNoFile: false;
   // Will be set by protocol handler to jump to a specific CFI
   pendingCfi?: string;
+  // React 18 root for rendering
+  private root: Root | null = null;
 
   constructor(leaf: WorkspaceLeaf, private settings: EpubPluginSettings, private plugin: EpubPlugin) {
     super(leaf);
@@ -99,8 +101,11 @@ Date: ${moment().toLocaleString()}
   }
 
   async onLoadFile(file: TFile): Promise<void> {
-    ReactDOM.unmountComponentAtNode(this.contentEl);
-    this.contentEl.empty();
+    // Lazy initialization of React root
+    if (!this.root) {
+      this.root = createRoot(this.contentEl);
+    }
+    
     const viewHeaderStyle = getComputedStyle(this.containerEl.parentElement.querySelector('div.view-header'));
     const viewHeaderHeight = parseFloat(viewHeaderStyle.height);
     const viewHeaderWidth = parseFloat(viewHeaderStyle.width);
@@ -121,7 +126,7 @@ Date: ${moment().toLocaleString()}
     // Clear pending after consuming
     this.pendingCfi = undefined;
 
-    ReactDOM.render(
+    this.root.render(
       <ErrorBoundary>
         <EpubReader
           contents={contents}
@@ -152,13 +157,15 @@ Date: ${moment().toLocaleString()}
             this.persistToolbarState(file.path, state).catch(() => {});
           }}
         />
-      </ErrorBoundary>,
-      this.contentEl
+      </ErrorBoundary>
     );
   }
 
   onunload(): void {
-    ReactDOM.unmountComponentAtNode(this.contentEl);
+    if (this.root) {
+      this.root.unmount();
+      this.root = null;
+    }
   }
 
   getDisplayText() {

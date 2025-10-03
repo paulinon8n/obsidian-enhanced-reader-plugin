@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-enhanced-reader-plugin",
-	"version": "1.6.3",
+	"version": "1.7.0",
 	"description": "This is an enhanced ePub reader plugin for Obsidian. Can open document with \".epub\" file extension.",
 	"main": "main.js",
 	"scripts": {
@@ -36,8 +36,8 @@
 	"dependencies": {
 		"epubjs": "^0.3.93",
 		"open-dyslexic": "^1.0.3",
-		"react": "npm:@preact/compat@^17.0.3",
-		"react-dom": "npm:@preact/compat@^17.0.3",
+		"react": "^18.3.1",
+		"react-dom": "^18.3.1",
 		"react-reader": "^1.0.2"
 	}
 }

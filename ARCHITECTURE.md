@@ -25,9 +25,11 @@ Este plugin deve ser modularizado para reduzir risco de bugs, facilitar testes e
 - **`storage/`**
   - **`localStorageAdapter.ts`**: Implementação do contrato `IStorage` usando LocalStorage
 
-### Hooks (React)
+### Hooks (React 18)
 
 - **`useDarkMode.ts`**: Observa mudança de tema do Obsidian e expõe `boolean`
+- Utilizando React 18.3.1 com suporte a Concurrent Features
+- API moderna com `createRoot()` para melhor performance
 
 ### UI Components
 
@@ -60,6 +62,8 @@ Plugin principal que registra o visualizador de EPUBs no Obsidian.
 ### `EpubView.tsx`
 
 - Gerencia o ciclo de vida da visualização de arquivos EPUB
+- Usa React 18 `createRoot()` API com lazy initialization
+- Mantém referência ao root para reutilização entre arquivos
 - Envolve o leitor com `ErrorBoundary` para falhas não previstas
 - Integra com sistema de notas do Obsidian
 
