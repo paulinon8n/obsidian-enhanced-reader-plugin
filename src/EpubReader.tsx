@@ -690,7 +690,23 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
           .map((el) => (typeof el.closest === "function" ? el.closest("[data-highlight-cfi]") : null))
           .find((el): el is Element => !!el) ?? null;
 
+      // ========== CORREÇÃO PRINCIPAL ==========
+      // Detectar iframe relacionado ao highlight
+      const viewRoot = resolvedHighlightElement?.closest?.(".epub-view") as HTMLElement | null;
+      const iframeElement = (viewRoot?.querySelector("iframe") as HTMLIFrameElement | null) ?? null;
+      const iframeWindow = iframeElement?.contentWindow ?? null;
+      const iframeDocument = iframeWindow?.document ?? null;
+
+      const overlayDocument = resolvedHighlightElement?.ownerDocument ?? null;
+      const overlayWindow = overlayDocument?.defaultView ?? null;
+
+      // Determinar se o elemento está dentro do iframe
+      const isInsideIframe = resolvedHighlightElement && iframeDocument &&
+                            iframeDocument.contains(resolvedHighlightElement);
+
       const containerRect = containerEl.getBoundingClientRect();
+      const iframeRect = iframeElement?.getBoundingClientRect();
+      // ========================================
 
       const highlightRect = (() => {
         const rect = resolvedHighlightElement?.getBoundingClientRect() ?? null;
@@ -709,42 +725,44 @@ export const EpubReader: React.FC<EpubReaderProps> = ({
         if (shapeNodes.length === 0) return [];
         return shapeNodes.map((shape) => {
           const rect = shape.getBoundingClientRect();
+
+          // ========== CORREÇÃO: Adicionar offset do iframe ==========
+          const leftOffset = isInsideIframe && iframeRect ? iframeRect.left : 0;
+          const topOffset = isInsideIframe && iframeRect ? iframeRect.top : 0;
+
           return {
-            left: rect.left - containerRect.left,
-            top: rect.top - containerRect.top,
+            left: rect.left + leftOffset - containerRect.left,
+            top: rect.top + topOffset - containerRect.top,
             width: rect.width,
             height: rect.height,
           } as SelectionRect;
+          // ==========================================================
         });
       };
 
       const rectsFromChildren = resolveRectFromChildren();
-
       const fallbackRect: SelectionRect | null = rectsFromChildren.length > 0 ? rectsFromChildren[0] : null;
+
+      // ========== CORREÇÃO: Calcular anchorRect com offset do iframe ==========
+      const leftOffset = isInsideIframe && iframeRect ? iframeRect.left : 0;
+      const topOffset = isInsideIframe && iframeRect ? iframeRect.top : 0;
 
       const anchorRect: SelectionRect = highlightRect
         ? {
-            left: highlightRect.left - containerRect.left,
-            top: highlightRect.top - containerRect.top,
+            left: highlightRect.left + leftOffset - containerRect.left,
+            top: highlightRect.top + topOffset - containerRect.top,
             width: Math.max(highlightRect.width, 1),
             height: Math.max(highlightRect.height, 1),
           }
         : fallbackRect ?? {
-            left: event.clientX - containerRect.left,
-            top: event.clientY - containerRect.top,
+            left: event.clientX + leftOffset - containerRect.left,
+            top: event.clientY + topOffset - containerRect.top,
             width: 1,
             height: 1,
           };
+      // ========================================================================
 
       const selectionRects = rectsFromChildren.length > 0 ? rectsFromChildren : [anchorRect];
-
-      const viewRoot = resolvedHighlightElement?.closest?.(".epub-view") as HTMLElement | null;
-      const iframeElement = (viewRoot?.querySelector("iframe") as HTMLIFrameElement | null) ?? null;
-      const iframeWindow = iframeElement?.contentWindow ?? null;
-      const iframeDocument = iframeWindow?.document ?? null;
-
-      const overlayDocument = resolvedHighlightElement?.ownerDocument ?? null;
-      const overlayWindow = overlayDocument?.defaultView ?? null;
 
       clearSelectionListeners();
       closeSelectionMenu();
