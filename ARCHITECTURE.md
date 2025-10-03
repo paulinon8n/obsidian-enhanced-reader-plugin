@@ -1,6 +1,6 @@
 # Enhanced Reader — Arquitetura (Ports & Adapters)
 
-Este plugin deve ser modularizado para reduzir risco de bugs, facilitar testes e evolução seguindo o padrão Ports & Adapters. Este é um propósito que deve ser contínuo e cada vez melhor e mais otimizado. Abaixo está descrito a arquitetura atual e está sempre em atualização. 
+Este plugin deve ser modularizado para reduzir risco de bugs, facilitar testes e evolução seguindo o padrão Ports & Adapters. Este é um propósito que deve ser contínuo e cada vez melhor e mais otimizado. Abaixo está descrito a arquitetura atual e está sempre em atualização.
 
 ## Camadas
 
